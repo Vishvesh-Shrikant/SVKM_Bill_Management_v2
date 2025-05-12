@@ -19,7 +19,7 @@ app.use(cookieParser());
 app.use(
     cors({
         credentials: true,
-        origin: process.env.CLIENT_URL,
+        origin: ['http://localhost:5173', 'https://svkm-bill-tracking-frontend-1.vercel.app/'],
         methods: ["GET", "POST", "PUT", "DELETE"],
     })
 );
