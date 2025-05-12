@@ -367,7 +367,6 @@ export const changeBatchWorkflowState = async (req, res) => {
           ) &&
           action == "forward"
         ) {
-          console.log("idhar aaya")
           let setObj = {
             currentCount: 5,
             maxCount: Math.max(billFound.maxCount, 5),
@@ -418,8 +417,6 @@ export const changeBatchWorkflowState = async (req, res) => {
             },
             { new: true }
           );
-
-          console.log(naya_bill)
         }
         // Trustees to PIMO Mumbai
         else if (

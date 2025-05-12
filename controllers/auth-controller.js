@@ -97,10 +97,12 @@ export const login = async (req, res) => {
     }
 
     // Ensure role, department, and region are always arrays (defensive, in case of legacy data)
-    if (user.role && !Array.isArray(user.role)) user.role = [user.role];
-    if (user.department && !Array.isArray(user.department)) user.department = [user.department];
-    if (user.region && !Array.isArray(user.region)) user.region = [user.region];
-
+    const formattedUser = {
+      ...user.toObject(),
+      role: Array.isArray(user.role) ? user.role : [user.role],
+      department: Array.isArray(user.department) ? user.department : [user.department],
+      region: Array.isArray(user.region) ? user.region : [user.region]
+    };
     // Check if password matches
     const isMatch = await user.matchPassword(password);
     if (!isMatch) {
