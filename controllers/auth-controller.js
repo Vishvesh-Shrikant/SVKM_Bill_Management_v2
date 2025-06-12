@@ -148,14 +148,6 @@ export const getMe = async (req, res) => {
   }
 };
 
-// Log user out / clear cookie
-export const logout = (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: 'Logged out successfully'
-  });
-};
-
 // Update password
 export const updatePassword = async (req, res) => {
   try {
@@ -350,7 +342,6 @@ export default {
   register,
   login,
   getMe,
-  logout,
   updatePassword,
   getUsers,
   getUser,
