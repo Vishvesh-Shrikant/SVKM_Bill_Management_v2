@@ -58,7 +58,7 @@ accountsDept.paymentDate
 accountsDept.hardCopy
 accountsDept.accountsIdentification
 accountsDept.paymentAmt
-accountsDept.status (except for auto-paid on paymentDate)
+accountsDept.status (except for auto-Paid on paymentDate)
 
 Returned/Received Dates:
 invReturnedToSite

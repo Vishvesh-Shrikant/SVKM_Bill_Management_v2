@@ -274,7 +274,7 @@ export const generatePDFReport = async (billIds) => {
 
     // Status badge
     const status = bill.status?.toUpperCase() || 'N/A';
-    const statusColor = status === 'PAID' ? '#00B050' : '#FFC000';
+    const statusColor = status === 'Paid' ? '#00B050' : '#FFC000';
     const statusWidth = doc.widthOfString(status) + 40;
     doc.rect(doc.page.width - statusWidth - 70, 70, statusWidth, 24)
        .fillAndStroke(statusColor, statusColor);

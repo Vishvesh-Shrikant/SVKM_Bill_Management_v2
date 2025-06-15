@@ -21,7 +21,7 @@ export const getOutstandingBillsReport = async (req, res) => {
     const filter = {
       // Bills that have been received by the accounting department
       "accountsDept.dateReceived": { $ne: null, $exists: true },
-      // But have not been paid yet - field based on actual schema
+      // But have not been Paid yet - field based on actual schema
       "accountsDept.paymentDate": { $eq: null }
     };
     
@@ -732,7 +732,7 @@ export const getInvoicesPaid = async (req, res) => {
     // Fetch bills from database, sort by sr no
     const invoices = await Bill.find(filter).sort({ "srNo": 1 });
     
-    console.log(`Found ${invoices.length} invoices paid`);
+    console.log(`Found ${invoices.length} invoices Paid`);
     
     // Format date strings properly
     const formatDate = (dateValue) => {
@@ -770,7 +770,7 @@ export const getInvoicesPaid = async (req, res) => {
     // Prepare the final response
     const response = {
       report: {
-        title: "Invoices paid",
+        title: "Invoices Paid",
         generatedAt: new Date().toISOString(),
         selectionCriteria: {
           dateRange: startDate && endDate ? `from ${startDate} to ${endDate}` : "All dates",
@@ -792,7 +792,7 @@ export const getInvoicesPaid = async (req, res) => {
     
     return res.status(200).json(response);
   } catch (error) {
-    console.error('Error generating invoices paid report:', error);
+    console.error('Error generating invoices Paid report:', error);
     return res.status(500).json({ 
       success: false, 
       message: 'Error generating report', 
@@ -814,7 +814,7 @@ export const getPendingBillsReport = async (req, res) => {
     // Build filter object based on actual bill schema
     // This report gets bills that are still pending with various offices
     const filter = {
-      // Invoice received at site but not yet completed/paid
+      // Invoice received at site but not yet completed/Paid
       "taxInvRecdAtSite": { $ne: null, $exists: true },
       // Not marked as completed (payment not made)
       "accountsDept.paymentDate": { $eq: null }

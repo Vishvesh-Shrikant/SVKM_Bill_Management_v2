@@ -167,7 +167,7 @@ Each field shows which roles have view/edit access using these columns:
 | Accts Identification | Enter | Account reference | Text |
 | Payment Amt | Enter | Payment amount | Number with two decimals |
 | Remarks Accts dept | Enter | Accounts comments | Text |
-| Status | Auto generated | Paid/unpaid | Text |
+| Status | Auto generated | Paid/UnPaid | Text |
 
 ## Access Rights Summary
 
@@ -452,7 +452,7 @@ This document outlines the complete bill processing workflow from receipt of goo
   - Accounts identification
   - Payment amount
   - Payment remarks
-  - Status (paid/unpaid - auto-generated)
+  - Status (Paid/UnPaid - auto-generated)
 
 ## 11. Filing Phase
 ### Bill Filing

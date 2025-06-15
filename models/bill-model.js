@@ -261,8 +261,8 @@ const billSchema = new mongoose.Schema(
             remarksAcctsDept: { type: String },
             status: {
                 type: String,
-                enum: ["paid", "unpaid", "Paid", "Unpaid"],
-                default: "unpaid",
+                enum: [ "Paid", "UnPaid"],
+                default: "UnPaid",
             },
         },
         billDate: { type: Date, required: true },
@@ -376,17 +376,17 @@ billSchema.pre("save", async function (next) {
       }
     }
 
-    // Auto-update payment status to 'paid' when payment date is added
+    // Auto-update payment status to 'Paid' when payment date is added
     if (this.accountsDept && this.accountsDept.paymentDate) {
-        if (!this.accountsDept.status || this.accountsDept.status !== "paid") {
+        if (!this.accountsDept.status || this.accountsDept.status !== "Paid") {
             console.log(
-                "[Pre-save] Auto-updating payment status to PAID based on payment date"
+                "[Pre-save] Auto-updating payment status to Paid based on payment date"
             );
-            this.accountsDept.status = "paid";
+            this.accountsDept.status = "Paid";
         }
     } else if (this.accountsDept && !this.accountsDept.status) {
-        // Default payment status is unpaid if not specified
-        this.accountsDept.status = "unpaid";
+        // Default payment status is UnPaid if not specified
+        this.accountsDept.status = "UnPaid";
     }
 
     // Fix any date fields that are in string format
@@ -747,7 +747,7 @@ billSchema.pre("save", async function (next) {
 //         case "Completed":
 //             // Update completion specific fields
 //             if (action === "forward" && this.accountsDept) {
-//                 this.accountsDept.status = "paid";
+//                 this.accountsDept.status = "Paid";
 //             }
 //             break;
 //     }

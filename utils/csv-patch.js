@@ -831,8 +831,8 @@ export const validateRequiredFields = async (data) => {
 
   // Ensure proper enum values for accountsDept.status
   if (data['accountsDept.status'] && 
-      !['paid', 'unpaid'].includes(data['accountsDept.status'].toLowerCase())) {
-    data['accountsDept.status'] = 'unpaid';
+      !['Paid', 'UnPaid'].includes(data['accountsDept.status'].toLowerCase())) {
+    data['accountsDept.status'] = 'UnPaid';
   }
 
   // Convert Yes/No fields
@@ -843,12 +843,12 @@ export const validateRequiredFields = async (data) => {
   // Fix amount mapping from taxInvAmt
   data.amount = parseAmount(data.taxInvAmt) || 0;
 
-  // If payment date is set, auto-update payment status to paid
+  // If payment date is set, auto-update payment status to Paid
   if (data['accountsDept.paymentDate'] && data['accountsDept.paymentDate'] !== '') {
-    data['accountsDept.status'] = 'paid';
+    data['accountsDept.status'] = 'Paid';
   } else if (!data['accountsDept.status']) {
-    // Default payment status is unpaid
-    data['accountsDept.status'] = 'unpaid';
+    // Default payment status is UnPaid
+    data['accountsDept.status'] = 'UnPaid';
   }
 
   return data;

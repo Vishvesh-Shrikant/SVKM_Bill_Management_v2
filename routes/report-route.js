@@ -18,7 +18,7 @@ router.use(authenticate);
 
 /**
  * @route GET /api/reports/outstanding-bills
- * @desc Get outstanding bills report (invoices received but not paid)
+ * @desc Get outstanding bills report (invoices received but not Paid)
  * @access Private (Accounts department only)
  */
 router.get('/outstanding-bills', authorize('accounts'), getOutstandingBillsReport);
@@ -85,11 +85,11 @@ router.get('/invoices-given-to-qs-site',
 );
 
 /**
- * @route GET /api/reports/invoices-paid
- * @desc Get report of invoices that have been paid
+ * @route GET /api/reports/invoices-Paid
+ * @desc Get report of invoices that have been Paid
  * @access Private (Accounts department only)
  */
-router.get('/invoices-paid', 
+router.get('/invoices-Paid', 
   authorize('accounts'), 
   getInvoicesPaid
 );
