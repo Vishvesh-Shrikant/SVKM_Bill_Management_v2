@@ -6,10 +6,10 @@ import crypto from 'crypto';
 // Register a new user
 export const register = async (req, res) => {
   try {
-    const { name, email, password, role, department, region } = req.body;
+    const { name, email, password, role, region } = req.body;
     
     // Check for required fields
-    if (!name || !email || !password || !department) {
+    if (!name || !email || !password) {
       return res.status(400).json({
         success: false,
         message: "Please provide all required fields: name, email, password, department"
@@ -40,12 +40,6 @@ export const register = async (req, res) => {
         message: "Please provide at least one role"
       });
     }
-    if (!department) {
-      return res.status(400).json({
-        success: false,
-        message: "Please provide at least one department"
-      });
-    }
     if (!region) {
       return res.status(400).json({
         success: false,
@@ -57,7 +51,7 @@ export const register = async (req, res) => {
       email,
       password,
       role: Array.isArray(role) ? role : [role],
-      department: Array.isArray(department) ? department : [department],
+     
       region: Array.isArray(region) ? region : [region]
     });
     
@@ -100,7 +94,6 @@ export const login = async (req, res) => {
     const formattedUser = {
       ...user.toObject(),
       role: Array.isArray(user.role) ? user.role : [user.role],
-      department: Array.isArray(user.department) ? user.department : [user.department],
       region: Array.isArray(user.region) ? user.region : [user.region]
     };
     // Check if password matches
@@ -237,12 +230,11 @@ export const getUser = async (req, res) => {
 // Admin: Update user details
 export const updateUser = async (req, res) => {
   try {
-    const { name, email, role, department, region } = req.body;
+    const { name, email, role, region } = req.body;
     
     const fieldsToUpdate = {
       name,
       email,
-      department,
       region
     };
     
@@ -332,7 +324,6 @@ const sendTokenResponse = (user, statusCode, res, message) => {
       name: user.name,
       email: user.email,
       role: user.role,
-      department: user.department,
       region: user.region
     }
   });

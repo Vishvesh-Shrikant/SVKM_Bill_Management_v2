@@ -107,7 +107,6 @@ userSchema.methods.getSignedToken = function () {
       name: this.name,
       email: this.email,
       role: this.role,
-      department: this.department,
       region: this.region,
     },
     process.env.JWT_SECRET,
