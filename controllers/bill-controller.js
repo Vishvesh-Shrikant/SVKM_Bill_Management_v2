@@ -24,15 +24,19 @@ const getFinancialYearPrefix = (date) => {
 };
 
 const createBill = async (req, res) => {
-  console.log("Vendor ID being searched:", req.body.vendorName);
-  console.log("Vendor ID type:", req.body.vendor);
-  const vendorExists = await VendorMaster.findOne({
-    vendorName: req.body.vendorName,
-  });
-  if (!vendorExists) {
-    return res.status(404).json({ message: "Vendor not found" });
-  }
   try {
+    // Accept vendorNo or vendorName from request
+    let vendorQuery = {};
+    if (req.body.vendorNo) {
+      vendorQuery.vendorNo = req.body.vendorNo;
+    } else if (req.body.vendorName) {
+      vendorQuery.vendorName = req.body.vendorName;
+    }
+    const vendorDoc = await VendorMaster.findOne(vendorQuery);
+    if (!vendorDoc) {
+      return res.status(404).json({ message: "Vendor not found" });
+    }
+
     const attachments = [];
     if (req.files && req.files.length > 0) {
       console.log(`Processing ${req.files.length} files for upload`);
@@ -86,12 +90,16 @@ const createBill = async (req, res) => {
     const schemaFields = Object.keys(Bill.schema.paths);
     const billData = {};
     for (const field of schemaFields) {
-      if (["_id", "__v", "createdAt", "updatedAt"].includes(field)) continue;
+      if (["_id", "__v", "createdAt", "updatedAt", "vendorNo", "vendorName"].includes(field)) continue;
       if (field === "srNo") {
         billData.srNo = newSrNo;
         continue;
       }
-      if (field.startsWith("workflowState.")) continue; 
+      if (field.startsWith("workflowState.")) continue;
+      if (field === "vendor") {
+        billData.vendor = vendorDoc._id;
+        continue;
+      }
       if (field === "panStatus" && req.body.panStatus) {
         // If panStatus is a string, look up the master
         let panStatusDoc = null;
@@ -178,6 +186,21 @@ const createBill = async (req, res) => {
       billData[field] = req.body[field] !== undefined ? req.body[field] : null;
     }
 
+    // Uniqueness check for vendorNo, taxInvNo, taxInvDate, region
+    const uniqueQuery = {
+      vendorNo: req.body.vendorNo,
+      taxInvNo: req.body.taxInvNo,
+      taxInvDate: req.body.taxInvDate,
+      region: req.body.region
+    };
+    const duplicate = await Bill.findOne(uniqueQuery);
+    if (duplicate) {
+      return res.status(400).json({
+        success: false,
+        message: "A bill with the same vendorNo, taxInvNo, taxInvDate, and region already exists."
+      });
+    }
+
     const newBillData = {
       ...billData,
       workflowState:{
@@ -205,7 +228,8 @@ const getBills = async (req, res) => {
       .populate("panStatus")
       .populate("currency")
       .populate("natureOfWork")
-      .populate("compliance206AB");
+      .populate("compliance206AB")
+      .populate("vendor"); // Populate vendor details
     // Map region, panStatus, complianceMaster, currency, and natureOfWork to their names
     const mappedBills = bills.map((bill) => {
       const billObj = bill.toObject();
@@ -222,6 +246,17 @@ const getBills = async (req, res) => {
         billObj.compliance206AB?.compliance206AB ||
         billObj.compliance206AB ||
         null;
+      // Overwrite vendor fields directly from populated vendor
+      if (billObj.vendor && typeof billObj.vendor === 'object') {
+        billObj.vendorNo = billObj.vendor.vendorNo;
+        billObj.vendorName = billObj.vendor.vendorName;
+        billObj.PAN = billObj.vendor.PAN;
+        billObj.GSTNumber = billObj.vendor.GSTNumber;
+        billObj.complianceStatus = billObj.vendor.complianceStatus;
+        billObj.PANStatus = billObj.vendor.PANStatus;
+      }
+      // Remove the vendor object itself
+      delete billObj.vendor;
       return billObj;
     });
     res.status(200).json(mappedBills);
@@ -294,12 +329,27 @@ const receiveBillByPimoAccounts = async (req, res) => {
 
 const getBill = async (req, res) => {
   try {
-    const bill = await Bill.findById(req.params.id)
-      .populate("region")
-      .populate("panStatus")
-      .populate("currency")
-      .populate("natureOfWork")
-      .populate("compliance206AB");
+    // Check for srNo in body or query, and if it is exactly 7 digits
+    const srNo = req.body.srNo || req.query.srNo;
+    let bill;
+    if (srNo && /^\d{7}$/.test(srNo)) {
+      bill = await Bill.findOne({ srNo })
+        .populate("region")
+        .populate("panStatus")
+        .populate("currency")
+        .populate("natureOfWork")
+        .populate("compliance206AB")
+        .populate("vendor"); // Populate vendor details
+    } else {
+      bill = await Bill.findById(req.params.id)
+        .populate("region")
+        .populate("panStatus")
+        .populate("currency")
+        .populate("natureOfWork")
+        .populate("compliance206AB")
+        .populate("vendor"); 
+    }
+    console.log("Retrieved bill:");
     if (!bill) {
       return res.status(404).json({ message: "Bill not found" });
     }
@@ -317,6 +367,17 @@ const getBill = async (req, res) => {
       billObj.compliance206AB?.compliance206AB ||
       billObj.compliance206AB ||
       null;
+    // Overwrite vendor fields directly from populated vendor
+    if (billObj.vendor && typeof billObj.vendor === 'object') {
+      billObj.vendorNo = billObj.vendor.vendorNo;
+      billObj.vendorName = billObj.vendor.vendorName;
+      billObj.PAN = billObj.vendor.PAN;
+      billObj.GSTNumber = billObj.vendor.GSTNumber;
+      billObj.complianceStatus = billObj.vendor.complianceStatus;
+      billObj.PANStatus = billObj.vendor.PANStatus;
+    }
+    // Remove the vendor object itself
+    delete billObj.vendor;
     res.status(200).json(billObj);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -403,6 +464,15 @@ const updateBill = async (req, res) => {
           ...req.body.workflowState.history,
         ];
       }
+    }
+
+    // Validate vendorNo and amount
+    const check = validateVendorNoAndAmount(
+      req.body.vendorNo !== undefined ? req.body.vendorNo : existingBill.vendorNo,
+      req.body.amount !== undefined ? req.body.amount : existingBill.amount
+    );
+    if (!check.valid) {
+      return res.status(400).json({ message: check.message });
     }
 
     // Set import mode to avoid validation errors for non-required fields
@@ -597,8 +667,33 @@ const patchBill = async (req, res) => {
       }
     });
 
+    // Validate vendorNo and amount
+    const check = validateVendorNoAndAmount(
+      req.body.vendorNo !== undefined ? req.body.vendorNo : existingBill.vendorNo,
+      req.body.amount !== undefined ? req.body.amount : existingBill.amount
+    );
+    if (!check.valid) {
+      return res.status(400).json({ message: check.message });
+    }
+
     // Set import mode to avoid validation errors
     existingBill.setImportMode(true);
+
+    // Uniqueness check for vendorNo, taxInvNo, taxInvDate, region (ignore self)
+    const uniqueQuery = {
+      vendorNo: req.body.vendorNo !== undefined ? req.body.vendorNo : existingBill.vendorNo,
+      taxInvNo: req.body.taxInvNo !== undefined ? req.body.taxInvNo : existingBill.taxInvNo,
+      taxInvDate: req.body.taxInvDate !== undefined ? req.body.taxInvDate : existingBill.taxInvDate,
+      region: req.body.region !== undefined ? req.body.region : existingBill.region,
+      _id: { $ne: existingBill._id }
+    };
+    const duplicate = await Bill.findOne(uniqueQuery);
+    if (duplicate) {
+      return res.status(400).json({
+        success: false,
+        message: "A bill with the same vendorNo, taxInvNo, taxInvDate, and region already exists."
+      });
+    }
 
     // Only update the bill if there are changes
     if (Object.keys(updates).length === 0) {
@@ -826,221 +921,6 @@ const getBillsStats = async (req, res) => {
   }
 };
 
-// Method to advance a bill to the next workflow state
-export const advanceWorkflow = async (req, res) => {
-  console.log("advanceWorkflow", req.body);
-  try {
-    console.log("advanceWorkflow", req.body);
-    const { id } = req.params;
-    const { actor, comments } = req.body;
-
-    if (!actor) {
-      return res.status(400).json({
-        success: false,
-        message: "Actor name is required to advance workflow",
-      });
-    }
-
-    const bill = await Bill.findById(id);
-    if (!bill) {
-      return res.status(404).json({
-        success: false,
-        message: "Bill not found",
-      });
-    }
-
-    const advanced = bill.moveToNextState(actor, comments);
-    if (!advanced) {
-      return res.status(400).json({
-        success: false,
-        message: "Cannot advance further, bill is already at the final stage",
-      });
-    }
-
-    await bill.save();
-
-    return res.status(200).json({
-      success: true,
-      message: "Bill advanced to next stage",
-      currentState: bill.workflowState.currentState,
-      lastTransition:
-        bill.workflowState.history[bill.workflowState.history.length - 1],
-    });
-  } catch (error) {
-    console.error("Workflow advancement error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to advance workflow lalalal",
-      error: error.message,
-    });
-  }
-};
-
-// Method to revert a bill to the previous workflow state
-export const revertWorkflow = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { actor, comments } = req.body;
-
-    if (!actor) {
-      return res.status(400).json({
-        success: false,
-        message: "Actor name is required to revert workflow",
-      });
-    }
-
-    const bill = await Bill.findById(id);
-    if (!bill) {
-      return res.status(404).json({
-        success: false,
-        message: "Bill not found",
-      });
-    }
-
-    const reverted = bill.moveToPreviousState(actor, comments);
-    if (!reverted) {
-      return res.status(400).json({
-        success: false,
-        message: "Cannot revert further, bill is already at the initial stage",
-      });
-    }
-
-    await bill.save();
-
-    return res.status(200).json({
-      success: true,
-      message: "Bill reverted to previous stage",
-      currentState: bill.workflowState.currentState,
-      lastTransition:
-        bill.workflowState.history[bill.workflowState.history.length - 1],
-    });
-  } catch (error) {
-    console.error("Workflow reversion error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to revert workflow",
-      error: error.message,
-    });
-  }
-};
-
-// Method to reject a bill in the workflow
-export const rejectBill = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { actor, comments } = req.body;
-
-    if (!actor) {
-      return res.status(400).json({
-        success: false,
-        message: "Actor name is required to reject bill",
-      });
-    }
-
-    if (!comments) {
-      return res.status(400).json({
-        success: false,
-        message: "Comments are required when rejecting a bill",
-      });
-    }
-
-    const bill = await Bill.findById(id);
-    if (!bill) {
-      return res.status(404).json({
-        success: false,
-        message: "Bill not found",
-      });
-    }
-
-    bill.rejectBill(actor, comments);
-    await bill.save();
-
-    return res.status(200).json({
-      success: true,
-      message: "Bill has been rejected",
-      currentState: bill.workflowState.currentState,
-      lastTransition:
-        bill.workflowState.history[bill.workflowState.history.length - 1],
-    });
-  } catch (error) {
-    console.error("Bill rejection error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to reject bill",
-      error: error.message,
-    });
-  }
-};
-
-// New method to recover a bill from rejected state back to a specific workflow state
-export const recoverRejectedBill = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { actor, comments, targetState } = req.body;
-
-    if (!actor) {
-      return res.status(400).json({
-        success: false,
-        message: "Actor name is required to recover workflow",
-      });
-    }
-
-    if (!comments) {
-      return res.status(400).json({
-        success: false,
-        message: "Comments are required when recovering a bill",
-      });
-    }
-
-    if (!targetState) {
-      return res.status(400).json({
-        success: false,
-        message: "Target state is required to recover a rejected bill",
-      });
-    }
-
-    const bill = await Bill.findById(id);
-    if (!bill) {
-      return res.status(404).json({
-        success: false,
-        message: "Bill not found",
-      });
-    }
-
-    if (bill.workflowState.currentState !== "Rejected") {
-      return res.status(400).json({
-        success: false,
-        message: "Only bills in 'Rejected' state can be recovered",
-      });
-    }
-
-    const recovered = bill.recoverFromRejected(targetState, actor, comments);
-    if (!recovered) {
-      return res.status(400).json({
-        success: false,
-        message: `Cannot recover bill to state ${targetState}`,
-      });
-    }
-
-    await bill.save();
-
-    return res.status(200).json({
-      success: true,
-      message: `Bill recovered from Rejected state to ${targetState}`,
-      currentState: bill.workflowState.currentState,
-      lastTransition:
-        bill.workflowState.history[bill.workflowState.history.length - 1],
-    });
-  } catch (error) {
-    console.error("Bill recovery error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to recover bill from rejected state",
-      error: error.message,
-    });
-  }
-};
-
 // Method to get workflow history for a bill
 export const getWorkflowHistory = async (req, res) => {
   try {
@@ -1118,132 +998,41 @@ export const getBillsByWorkflowState = async (req, res) => {
   }
 };
 
-// Method to regenerate serial numbers for all bills
-export const regenerateAllSerialNumbers = async (req, res) => {
+
+// Get bill by srNo (7 digits)
+export const getBillBySrNo = async (req, res) => {
   try {
-    if (!req.user || !req.user.role.includes("admin")) {
-      return res.status(403).json({
-        success: false,
-        message: "Only administrators can perform this operation",
-      });
+    const { srNo } = req.params;
+    if (!/^\d{7}$/.test(srNo)) {
+      return res.status(400).json({ message: "Invalid srNo format. Must be 7 digits." });
     }
-
-    const bills = await Bill.find({}).sort({ createdAt: 1 });
-
-    console.log(`[Regenerate] Found ${bills.length} bills to process`);
-
-    // Group bills by financial year
-    const billsByFY = {};
-
-    // Group each bill by financial year
-    bills.forEach((bill) => {
-      if (!bill.billDate) {
-        console.log(`[Regenerate] Skipping bill ${bill._id} - no bill date`);
-        return;
-      }
-
-      const fyPrefix = getFinancialYearPrefix(new Date(bill.billDate));
-
-      if (!billsByFY[fyPrefix]) {
-        billsByFY[fyPrefix] = [];
-      }
-
-      billsByFY[fyPrefix].push(bill);
-    });
-
-    console.log(
-      `[Regenerate] Bills grouped by financial years: ${Object.keys(
-        billsByFY
-      ).join(", ")}`
-    );
-
-    // Process each financial year group
-    const results = {};
-    const errors = [];
-
-    for (const [fyPrefix, fyBills] of Object.entries(billsByFY)) {
-      results[fyPrefix] = {
-        totalBills: fyBills.length,
-        processedBills: 0,
-        errorCount: 0,
-      };
-
-      // Sort bills by date within each FY
-      fyBills.sort((a, b) => new Date(a.billDate) - new Date(b.billDate));
-
-      // Assign new serial numbers in sequence
-      for (let i = 0; i < fyBills.length; i++) {
-        const bill = fyBills[i];
-
-        try {
-          // Store old serial number
-          bill.srNoOld = bill.srNo || null;
-
-          // Create new serial number
-          const serialNumber = i + 1;
-          const serialFormatted = serialNumber.toString().padStart(4, "0");
-          bill.srNo = `${fyPrefix}${serialFormatted}`;
-          g().padStart(5, "0");
-          bill.srNo = `${fyPrefix}${serialFormatted}`;
-          // Save bill
-          // Save bill
-          await bill.save();
-          results[fyPrefix].processedBills++;
-
-          console.log(
-            `[Regenerate] Updated bill ${bill._id}: ${
-              bill.srNoOld || "null"
-            } → ${bill.srNo}`
-          );
-        } catch (error) {
-          console.error(`[Regenerate] Error updating bill ${bill._id}:`, error);
-          errors.push({ id: bill._id, error: error.message });
-          results[fyPrefix].errorCount++;
-        }
-      }
+    const bill = await Bill.findOne({ srNo })
+      .populate("region")
+      .populate("panStatus")
+      .populate("currency")
+      .populate("natureOfWork")
+      .populate("compliance206AB");
+    if (!bill) {
+      return res.status(404).json({ message: "Bill not found" });
     }
-
-    return res.status(200).json({
-      success: true,
-      message: "Serial number regeneration complete",
-      results,
-      errors: errors.length > 0 ? errors : null,
-    });
+    const billObj = bill.toObject();
+    billObj.region = Array.isArray(billObj.region) ? billObj.region.map((r) => r?.name || r) : billObj.region;
+    billObj.panStatus = billObj.panStatus?.name || billObj.panStatus || null;
+    billObj.complianceMaster =
+      billObj.complianceMaster?.compliance206AB ||
+      billObj.complianceMaster ||
+      null;
+    billObj.currency = billObj.currency?.currency || billObj.currency || null;
+    billObj.natureOfWork =
+      billObj.natureOfWork?.natureOfWork || billObj.natureOfWork || null;
+    billObj.compliance206AB =
+      billObj.compliance206AB?.compliance206AB ||
+      billObj.compliance206AB ||
+      null;
+    res.status(200).json(billObj);
   } catch (error) {
-    console.error("[Regenerate] Error regenerating serial numbers:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to regenerate serial numbers",
-      error: error.message,
-    });
+    res.status(400).json({ message: error.message });
   }
-};
-
-// Change the workflow state of a bill
-export const changeWorkflowState = async (req, res) => {
-  const { id } = req.params;
-  const { newState } = req.body;
-  const bill = await Bill.findById(id);
-  if (!bill) {
-    return res.status(404).json({
-      success: false,
-      message: "Bill not found",
-    });
-  }
-  bill.workflowState.history.push({
-    state: bill.workflowState.currentState,
-    timestamp: new Date(),
-    actor: req.body.actor,
-    comments: req.body.comments,
-    action: req.body.action || "forward",
-  });
-  bill.workflowState.currentState = newState;
-  await bill.save();
-  return res.status(200).json({
-    success: true,
-    message: "Workflow state updated successfully",
-    bill,
-  });
 };
 
 export default {
@@ -1254,14 +1043,144 @@ export default {
   deleteBill,
   filterBills,
   getBillsStats,
-  advanceWorkflow,
-  revertWorkflow,
-  rejectBill,
+  // advanceWorkflow,
+  // revertWorkflow,
+  // rejectBill,
   getWorkflowHistory,
   getBillsByWorkflowState,
-  recoverRejectedBill,
+  // recoverRejectedBill,
   patchBill,
-  regenerateAllSerialNumbers,
-  changeWorkflowState,
+  // regenerateAllSerialNumbers,
+  // changeWorkflowState,
   receiveBillByPimoAccounts,
+  getBillBySrNo,
 };
+
+
+// Method to regenerate serial numbers for all bills
+// export const regenerateAllSerialNumbers = async (req, res) => {
+//   try {
+//     if (!req.user || !req.user.role.includes("admin")) {
+//       return res.status(403).json({
+//         success: false,
+//         message: "Only administrators can perform this operation",
+//       });
+//     }
+
+//     const bills = await Bill.find({}).sort({ createdAt: 1 });
+
+//     console.log(`[Regenerate] Found ${bills.length} bills to process`);
+
+//     // Group bills by financial year
+//     const billsByFY = {};
+
+//     // Group each bill by financial year
+//     bills.forEach((bill) => {
+//       if (!bill.billDate) {
+//         console.log(`[Regenerate] Skipping bill ${bill._id} - no bill date`);
+//         return;
+//       }
+
+//       const fyPrefix = getFinancialYearPrefix(new Date(bill.billDate));
+
+//       if (!billsByFY[fyPrefix]) {
+//         billsByFY[fyPrefix] = [];
+//       }
+
+//       billsByFY[fyPrefix].push(bill);
+//     });
+
+//     console.log(
+//       `[Regenerate] Bills grouped by financial years: ${Object.keys(
+//         billsByFY
+//       ).join(", ")}`
+//     );
+
+//     // Process each financial year group
+//     const results = {};
+//     const errors = [];
+
+//     for (const [fyPrefix, fyBills] of Object.entries(billsByFY)) {
+//       results[fyPrefix] = {
+//         totalBills: fyBills.length,
+//         processedBills: 0,
+//         errorCount: 0,
+//       };
+
+//       // Sort bills by date within each FY
+//       fyBills.sort((a, b) => new Date(a.billDate) - new Date(b.billDate));
+
+//       // Assign new serial numbers in sequence
+//       for (let i = 0; i < fyBills.length; i++) {
+//         const bill = fyBills[i];
+
+//         try {
+//           // Store old serial number
+//           bill.srNoOld = bill.srNo || null;
+
+//           // Create new serial number
+//           const serialNumber = i + 1;
+//           const serialFormatted = serialNumber.toString().padStart(4, "0");
+//           bill.srNo = `${fyPrefix}${serialFormatted}`;
+//           g().padStart(5, "0");
+//           bill.srNo = `${fyPrefix}${serialFormatted}`;
+//           // Save bill
+//           // Save bill
+//           await bill.save();
+//           results[fyPrefix].processedBills++;
+
+//           console.log(
+//             `[Regenerate] Updated bill ${bill._id}: ${
+//               bill.srNoOld || "null"
+//             } → ${bill.srNo}`
+//           );
+//         } catch (error) {
+//           console.error(`[Regenerate] Error updating bill ${bill._id}:`, error);
+//           errors.push({ id: bill._id, error: error.message });
+//           results[fyPrefix].errorCount++;
+//         }
+//       }
+//     }
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Serial number regeneration complete",
+//       results,
+//       errors: errors.length > 0 ? errors : null,
+//     });
+//   } catch (error) {
+//     console.error("[Regenerate] Error regenerating serial numbers:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Failed to regenerate serial numbers",
+//       error: error.message,
+//     });
+//   }
+// };
+
+// // Change the workflow state of a bill
+// export const changeWorkflowState = async (req, res) => {
+//   const { id } = req.params;
+//   const { newState } = req.body;
+//   const bill = await Bill.findById(id);
+//   if (!bill) {
+//     return res.status(404).json({
+//       success: false,
+//       message: "Bill not found",
+//     });
+//   }
+//   bill.workflowState.history.push({
+//     state: bill.workflowState.currentState,
+//     timestamp: new Date(),
+//     actor: req.body.actor,
+//     comments: req.body.comments,
+//     action: req.body.action || "forward",
+//   });
+//   bill.workflowState.currentState = newState;
+//   await bill.save();
+//   return res.status(200).json({
+//     success: true,
+//     message: "Workflow state updated successfully",
+//     bill,
+//   });
+// };

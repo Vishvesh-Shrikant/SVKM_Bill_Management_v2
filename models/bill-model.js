@@ -97,8 +97,11 @@ const billSchema = new mongoose.Schema(
             lastUpdated: { type: Date, default: Date.now },
         },
         projectDescription: { type: String, required: true },
-        vendorNo: { type: String, required: true },
-        vendorName: { type: String, required: true },
+        vendor: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "VendorMaster",
+            required: true,
+        },
         gstNumber: { type: String, 
             // required: true 
         },
@@ -266,14 +269,6 @@ const billSchema = new mongoose.Schema(
             },
         },
         billDate: { type: Date, required: true },
-        vendor: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "VendorMaster",
-            required: function () {
-                // Only require vendor if not in import mode
-                return !this._importMode;
-            },
-        },
         amount: { type: Number, required: true },
         currency: {
             type: mongoose.Schema.Types.ObjectId,
@@ -324,140 +319,142 @@ const billSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
+//Deleteeeeee
+
 // Function to get financial year prefix
-const getFinancialYearPrefix = (date) => {
-    const d = date || new Date();
-    let currentYear = d.getFullYear().toString().substr(-2);
-    if (d.getMonth() >= 3) {
-        console.log("Current Year:", currentYear);
-        return `${currentYear}`;
-    } else {
-        let prevYear = (parseInt(currentYear) - 1).toString().padStart(2, "0");
-        console.log("Previous Year:", prevYear);
-        return `${prevYear}`;
-    }
-};
+// const getFinancialYearPrefix = (date) => {
+//     const d = date || new Date();
+//     let currentYear = d.getFullYear().toString().substr(-2);
+//     if (d.getMonth() >= 3) {
+//         console.log("Current Year:", currentYear);
+//         return `${currentYear}`;
+//     } else {
+//         let prevYear = (parseInt(currentYear) - 1).toString().padStart(2, "0");
+//         console.log("Previous Year:", prevYear);
+//         return `${prevYear}`;
+//     }
+// };
 
-// Pre-save hook to handle workflow state changes and other validations
-billSchema.pre("save", async function (next) {
+// // Pre-save hook to handle workflow state changes and other validations
+// billSchema.pre("save", async function (next) {
 
-    // Format the srNo for imported bills
-    // Explicitly check that import mode is true (boolean) before applying import formatting
-    if (this.srNo && this._importMode === true) {
-        // Extract numeric part if srNo is not already numeric
-        let numericPart;
-        if (typeof this.srNo === "string") {
-            numericPart = this.srNo.replace(/\D/g, "");
-        } else {
-            numericPart = String(this.srNo);
-        }
+//     // Format the srNo for imported bills
+//     // Explicitly check that import mode is true (boolean) before applying import formatting
+//     if (this.srNo && this._importMode === true) {
+//         // Extract numeric part if srNo is not already numeric
+//         let numericPart;
+//         if (typeof this.srNo === "string") {
+//             numericPart = this.srNo.replace(/\D/g, "");
+//         } else {
+//             numericPart = String(this.srNo);
+//         }
 
-        // Get the current financial year prefix
-        const fyPrefix = getFinancialYearPrefix(this.billDate);
+//         // Get the current financial year prefix
+//         const fyPrefix = getFinancialYearPrefix(this.billDate);
 
-        // Format with financial year prefix and padded to ensure at least 5 digits
-        this.srNo = `${fyPrefix}${numericPart.padStart(5, "0")}`;
-        console.log(`[Pre-save] Formatted imported srNo: ${this.srNo}`);
-    }
+//         // Format with financial year prefix and padded to ensure at least 5 digits
+//         this.srNo = `${fyPrefix}${numericPart.padStart(5, "0")}`;
+//         console.log(`[Pre-save] Formatted imported srNo: ${this.srNo}`);
+//     }
 
-    // Ensure region is always uppercase for consistency
-    if (this.region) {
-      if (Array.isArray(this.region)) {
-        this.region = this.region.map(r => r.toUpperCase());
-        console.log(
-          `[Pre-save] Normalized regions: "${this.region.join(", ")}"`
-        );
-      } else {
-        const originalRegion = this.region;
-        this.region = this.region.toUpperCase();
-        console.log(
-          `[Pre-save] Normalized region: "${originalRegion}" → "${this.region}"`
-        );
-      }
-    }
+//     // Ensure region is always uppercase for consistency
+//     if (this.region) {
+//       if (Array.isArray(this.region)) {
+//         this.region = this.region.map(r => r.toUpperCase());
+//         console.log(
+//           `[Pre-save] Normalized regions: "${this.region.join(", ")}"`
+//         );
+//       } else {
+//         const originalRegion = this.region;
+//         this.region = this.region.toUpperCase();
+//         console.log(
+//           `[Pre-save] Normalized region: "${originalRegion}" → "${this.region}"`
+//         );
+//       }
+//     }
 
-    // Auto-update payment status to 'Paid' when payment date is added
-    if (this.accountsDept && this.accountsDept.paymentDate) {
-        if (!this.accountsDept.status || this.accountsDept.status !== "Paid") {
-            console.log(
-                "[Pre-save] Auto-updating payment status to Paid based on payment date"
-            );
-            this.accountsDept.status = "Paid";
-        }
-    } else if (this.accountsDept && !this.accountsDept.status) {
-        // Default payment status is UnPaid if not specified
-        this.accountsDept.status = "UnPaid";
-    }
+//     // Auto-update payment status to 'Paid' when payment date is added
+//     if (this.accountsDept && this.accountsDept.paymentDate) {
+//         if (!this.accountsDept.status || this.accountsDept.status !== "Paid") {
+//             console.log(
+//                 "[Pre-save] Auto-updating payment status to Paid based on payment date"
+//             );
+//             this.accountsDept.status = "Paid";
+//         }
+//     } else if (this.accountsDept && !this.accountsDept.status) {
+//         // Default payment status is UnPaid if not specified
+//         this.accountsDept.status = "UnPaid";
+//     }
 
-    // Fix any date fields that are in string format
-    if (this._importMode) {
-        // Find all date fields in the schema and convert strings to Date objects
-        Object.keys(this.schema.paths).forEach((path) => {
-            const schemaType = this.schema.paths[path];
+//     // Fix any date fields that are in string format
+//     if (this._importMode) {
+//         // Find all date fields in the schema and convert strings to Date objects
+//         Object.keys(this.schema.paths).forEach((path) => {
+//             const schemaType = this.schema.paths[path];
 
-            // Only process Date fields
-            if (schemaType.instance === "Date") {
-                const value = this.get(path);
+//             // Only process Date fields
+//             if (schemaType.instance === "Date") {
+//                 const value = this.get(path);
 
-                // If it's a string, try to convert it or set to null
-                if (typeof value === "string") {
-                    try {
-                        console.log(
-                            `[Pre-save] Converting string date for ${path}: "${value}"`
-                        );
+//                 // If it's a string, try to convert it or set to null
+//                 if (typeof value === "string") {
+//                     try {
+//                         console.log(
+//                             `[Pre-save] Converting string date for ${path}: "${value}"`
+//                         );
 
-                        // First, try built-in Date parsing
-                        const dateObj = new Date(value);
+//                         // First, try built-in Date parsing
+//                         const dateObj = new Date(value);
 
-                        if (!isNaN(dateObj.getTime())) {
-                            this.set(path, dateObj);
-                            console.log(
-                                `[Pre-save] Converted ${path} to Date: ${dateObj}`
-                            );
-                        } else {
-                            // If DD-MM-YYYY format, try manual parsing
-                            if (value.includes("-")) {
-                                const parts = value.split("-");
-                                if (parts.length === 3) {
-                                    const [day, month, year] = parts;
-                                    const parsedDate = new Date(
-                                        parseInt(year, 10),
-                                        parseInt(month, 10) - 1,
-                                        parseInt(day, 10)
-                                    );
+//                         if (!isNaN(dateObj.getTime())) {
+//                             this.set(path, dateObj);
+//                             console.log(
+//                                 `[Pre-save] Converted ${path} to Date: ${dateObj}`
+//                             );
+//                         } else {
+//                             // If DD-MM-YYYY format, try manual parsing
+//                             if (value.includes("-")) {
+//                                 const parts = value.split("-");
+//                                 if (parts.length === 3) {
+//                                     const [day, month, year] = parts;
+//                                     const parsedDate = new Date(
+//                                         parseInt(year, 10),
+//                                         parseInt(month, 10) - 1,
+//                                         parseInt(day, 10)
+//                                     );
 
-                                    if (!isNaN(parsedDate.getTime())) {
-                                        this.set(path, parsedDate);
-                                        console.log(
-                                            `[Pre-save] Manually converted ${path} to Date: ${parsedDate}`
-                                        );
-                                        return; // Continue to next field
-                                    }
-                                }
-                            }
+//                                     if (!isNaN(parsedDate.getTime())) {
+//                                         this.set(path, parsedDate);
+//                                         console.log(
+//                                             `[Pre-save] Manually converted ${path} to Date: ${parsedDate}`
+//                                         );
+//                                         return; // Continue to next field
+//                                     }
+//                                 }
+//                             }
 
-                            // If all parsing fails, set to null
-                            console.log(
-                                `[Pre-save] Could not parse date for ${path}, setting to null`
-                            );
-                            this.set(path, null);
-                        }
-                    } catch (error) {
-                        console.error(
-                            `[Pre-save] Error converting date for ${path}:`,
-                            error
-                        );
-                        this.set(path, null);
-                    }
-                }
-            }
-        });
-    }
-    // console.log("DEBUG1:",this.workflowState);
-    // Update workflow lastUpdated timestamp whenever the document is saved
+//                             // If all parsing fails, set to null
+//                             console.log(
+//                                 `[Pre-save] Could not parse date for ${path}, setting to null`
+//                             );
+//                             this.set(path, null);
+//                         }
+//                     } catch (error) {
+//                         console.error(
+//                             `[Pre-save] Error converting date for ${path}:`,
+//                             error
+//                         );
+//                         this.set(path, null);
+//                     }
+//                 }
+//             }
+//         });
+//     }
+//     // console.log("DEBUG1:",this.workflowState);
+//     // Update workflow lastUpdated timestamp whenever the document is saved
 
-    next();
-});
+//     next();
+// });
 
 // // Method to advance to the next state in the workflow
 // billSchema.methods.moveToNextState = function (actor, comments = "") {
