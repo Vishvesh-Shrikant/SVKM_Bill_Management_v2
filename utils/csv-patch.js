@@ -110,23 +110,6 @@ export const fields = [
     "accountsDept.status"
 ];
 
-// Helper: unflatten nested objects
-export const unflattenData = (data) => {
-  const result = {};
-  for (const key in data) {
-    const keys = key.split('.');
-    keys.reduce((acc, part, index) => {
-      if (index === keys.length - 1) {
-        acc[part] = data[key];
-      } else {
-        acc[part] = acc[part] || {};
-      }
-      return acc[part];
-    }, result);
-  }
-  return result;
-};
-
 // Helper: flatten nested objects (using dot notation)
 export const flattenDoc = (doc, path = '') => {
   let res = {};
@@ -486,86 +469,6 @@ export const convertTypes = (data) => {
   return result;
 };
 
-// Improved helper function to merge data without overwriting non-null DB values with null Excel values
-export const mergeWithExisting = (existingData, newData) => {
-  // First organize QS fields in the new data to ensure proper structure
-  organizeQSFields(newData);
-  
-  // Deep merge with special handling for null/undefined values
-  const deepMerge = (existing, updates) => {
-    if (!existing) return updates;
-    if (!updates) return existing;
-    
-    // Create a copy of the existing data as our result
-    const result = { ...existing };
-    
-    // Process each key in the updates
-    Object.keys(updates).forEach(key => {
-      const existingValue = existing[key];
-      const newValue = updates[key];
-      
-      // Special handling for GST Number field
-      if (key === 'gstNumber') {
-        // Check if the new value is a placeholder GST value
-        const isPlaceholderGST = !newValue || 
-          newValue === '' || 
-          newValue === 'NOTPROVIDED' || 
-          newValue === 'NOT PROVIDED' || 
-          newValue === 'NotProvided' || 
-          newValue === 'Not Provided' || 
-          newValue === 'N/A' || 
-          newValue === 'NA';
-          
-        // Check if existing value looks like a valid GST (15 chars)
-        const hasValidExistingGST = existingValue && 
-          typeof existingValue === 'string' && 
-          existingValue.length === 15 &&
-          !['NOTPROVIDED', 'NOT PROVIDED', 'NotProvided', 'Not Provided'].includes(existingValue);
-          
-        if (isPlaceholderGST && hasValidExistingGST) {
-          // Keep the existing valid GST number instead of overwriting with placeholder
-          return; // Skip this update
-        }
-      }
-      
-      // Check if the new value is a placeholder or empty value
-      const isPlaceholderValue = 
-        newValue === null || 
-        newValue === undefined || 
-        newValue === '' || 
-        newValue === 'Not Provided' || 
-        newValue === 'Not provided' || 
-        newValue === 'not provided' ||
-        newValue === 'N/A' ||
-        newValue === 'n/a';
-      
-      // Case 1: New value is null/undefined/empty string/placeholder - don't overwrite existing data
-      if (isPlaceholderValue) {
-        // Keep existing value
-      }
-      // Case 2: Both are objects (but not Date) - recursive merge
-      else if (
-        existingValue && 
-        typeof existingValue === 'object' && 
-        !(existingValue instanceof Date) &&
-        typeof newValue === 'object' && 
-        !(newValue instanceof Date)
-      ) {
-        result[key] = deepMerge(existingValue, newValue);
-      }
-      // Case 3: New value exists - use it
-      else {
-        result[key] = newValue;
-      }
-    });
-    
-    return result;
-  };
-
-  // Perform the deep merge
-  return deepMerge(existingData, newData);
-};
-
 // Helper: create a temporary file path
 export const createTempFilePath = (prefix, extension) => {
   const tempDir = os.tmpdir();
@@ -793,8 +696,10 @@ export const validateRequiredFields = async (data) => {
   }
 
   // Handle natureOfWork reference
-  try {
-    if (data.typeOfInv || data.natureOfWork) {
+ try {
+    if (data.natureOfWork && mongoose.Types.ObjectId.isValid(data.natureOfWork)) {
+      // Already a valid ObjectId, do nothing
+    } else if (data.typeOfInv || data.natureOfWork) {
       const workType = data.natureOfWork || data.typeOfInv;
       // Try to find the nature of work in the master (case-insensitive)
       const workDoc = await NatureOfWorkMaster.findOne({ 
@@ -836,8 +741,8 @@ export const validateRequiredFields = async (data) => {
 
   // Ensure proper enum values for accountsDept.status
   if (data['accountsDept.status'] && 
-      !['Paid', 'UnPaid'].includes(data['accountsDept.status'].toLowerCase())) {
-    data['accountsDept.status'] = 'UnPaid';
+      !['Paid', 'Unpaid'].includes(data['accountsDept.status'].toLowerCase())) {
+    data['accountsDept.status'] = 'Unpaid';
   }
 
   // Convert Yes/No fields
@@ -852,117 +757,13 @@ export const validateRequiredFields = async (data) => {
   if (data['accountsDept.paymentDate'] && data['accountsDept.paymentDate'] !== '') {
     data['accountsDept.status'] = 'Paid';
   } else if (!data['accountsDept.status']) {
-    // Default payment status is UnPaid
-    data['accountsDept.status'] = 'UnPaid';
+    // Default payment status is Unpaid
+    data['accountsDept.status'] = 'Unpaid';
   }
 
   return data;
 };
 
-// Update headerMapping with exact Excel headers and fix issues with duplicates
-export const headerMapping = {
-  "Sr No": "srNo",
-  "Sr no Old": "srNoOld",
-  "Type of inv": "typeOfInv",
-  "Region": "region",
-  "Project Description": "projectDescription",
-  "Vendor no": "vendorNo",
-  "Vendor Name": "vendorName",
-  "GST Number": "gstNumber",
-  "206AB Compliance": "compliance206AB",
-  "PAN Status": "panStatus",
-  "If PO created??": "poCreated",
-  "PO no": "poNo",
-  "PO Dt": "poDate",
-  "PO Amt": "poAmt",
-  "Proforma Inv No": "proformaInvNo",
-  "Proforma Inv Dt": "proformaInvDate",
-  "Proforma Inv Amt": "proformaInvAmt",
-  "Proforma Inv Recd at site": "proformaInvRecdAtSite",
-  "Proforma Inv Recd by": "proformaInvRecdBy",
-  "Tax Inv no": "taxInvNo",
-  "Tax Inv Dt": "taxInvDate",
-  "Currency": "currency",
-  "Tax Inv Amt": "taxInvAmt",
-  "Tax Inv Amt ": "taxInvAmt",  // Both versions with and without space
-  "Tax Inv Recd at site": "taxInvRecdAtSite",
-  "Tax Inv Recd by": "taxInvRecdBy",
-  "Department": "department",
-  "Remarks by Site Team": "remarksBySiteTeam",
-  "Attachment": "attachment",
-  "Attachment Type": "attachmentType",
-  "Advance Dt": "advanceDate",
-  "Advance Amt": "advanceAmt",
-  "Advance Percentage": "advancePercentage",
-  "Advance Percentage ": "advancePercentage",  // Both versions with and without space
-  "Adv request entered by": "advRequestEnteredBy",
-  "Dt given to Quality Engineer": "qualityEngineer.dateGiven",
-  "Name of Quality Engineer": "qualityEngineer.name",
-  "Dt given to QS for Inspection": "qsInspection.dateGiven",
-  // QS Name fields will be handled dynamically in processing
-  "Name of QS": "qsInspection.name", // Default mapping, will be overridden contextually when needed
-  "Checked by QS with Dt of Measurment": "qsMeasurementCheck.dateGiven",
-  "Checked  by QS with Dt of Measurment": "qsMeasurementCheck.dateGiven", // With extra space
-  "Given to vendor-Query/Final Inv": "vendorFinalInv.dateGiven",
-  "Dt given to QS for COP": "qsCOP.dateGiven",
-  "Name - QS": "qsCOP.name",
-  "COP Dt": "copDetails.date",
-  "COP Amt": "copDetails.amount",
-  "Remarks by QS Team": "remarksByQSTeam",
-  "Dt given for MIGO": "migoDetails.dateGiven",
-  "MIGO no": "migoDetails.no",
-  "MIGO Dt": "migoDetails.date",
-  "MIGO Amt": "migoDetails.amount",
-  "Migo done by": "migoDetails.doneBy",
-  "Dt-Inv returned to Site office": "invReturnedToSite",
-  "Dt given to Site Engineer": "siteEngineer.dateGiven",
-  "Name of Site Engineer": "siteEngineer.name",
-  "Dt given to Architect": "architect.dateGiven",
-  "Name of Architect": "architect.name",
-  "Dt given-Site Incharge": "siteIncharge.dateGiven",
-  "Name-Site Incharge": "siteIncharge.name",
-  "Remarks": "remarks",
-  "Remarks ": "remarks", // With extra space
-  "Dt given to Site Office for dispatch": "siteOfficeDispatch.dateGiven",
-  "Name-Site Office": "siteOfficeDispatch.name",
-  "Status": "status",
-  "Dt given to PIMO Mumbai": "pimoMumbai.dateGiven",
-  "Dt recd at PIMO Mumbai": "pimoMumbai.dateReceived",
-  "Name recd by PIMO Mumbai": "pimoMumbai.receivedBy",
-  "Dt given to QS Mumbai": "qsMumbai.dateGiven",
-  "Name of QS": "qsMumbai.name", // This will be handled dynamically
-  "Dt given to PIMO Mumbai ": "pimoMumbai.dateGivenPIMO", // With space
-  "Name -PIMO": "pimoMumbai.namePIMO",
-  "Dt given to IT Dept": "itDept.dateGiven",
-  "Name- given to IT Dept": "itDept.name",
-  "Name-given to PIMO": "pimoMumbai.namePIMO2",
-  "SES no": "sesDetails.no",
-  "SES Amt": "sesDetails.amount",
-  "SES Dt": "sesDetails.date",
-  "SES done by": "sesDetails.doneBy",
-  "Dt recd from IT Deptt": "itDept.dateReceived",
-  "Dt recd from PIMO": "pimoMumbai.dateReceivedFromPIMO",
-  "Dt given to Director/Advisor/Trustee for approval": "approvalDetails.directorApproval.dateGiven",
-  "Dt recd back in PIMO after approval": "approvalDetails.directorApproval.dateReceived",
-  "Remarks PIMO Mumbai": "approvalDetails.remarksPimoMumbai",
-  "Dt given to Accts dept": "accountsDept.dateGiven",
-  "Name -given by PIMO office": "accountsDept.givenBy",
-  "Dt recd in Accts dept": "accountsDept.dateReceived",
-  "Name recd by Accts dept": "accountsDept.receivedBy",
-  "Dt returned back to PIMO": "accountsDept.returnedToPimo",
-  "Dt returned back to  PIMO": "accountsDept.returnedToPimo", // With extra space
-  "Dt recd back in Accts dept": "accountsDept.receivedBack",
-  "Inv given for booking and checking": "accountsDept.invBookingChecking",
-  "Payment instructions": "accountsDept.paymentInstructions",
-  "Remarks for pay instructions": "accountsDept.remarksForPayInstructions",
-  "F110 Identification": "accountsDept.f110Identification",
-  "Dt of Payment": "accountsDept.paymentDate",
-  "Hard Copy": "accountsDept.hardCopy",
-  "Accts Identification": "accountsDept.accountsIdentification",
-  "Payment Amt": "accountsDept.paymentAmt",
-  "Remarks Accts dept": "accountsDept.remarksAcctsDept",
-  "Status": "accountsDept.status" // This will be handled dynamically
-};
 
 // Map to identify which "Name of QS" and "Status" field is which based on its position
 export const contextBasedMapping = {

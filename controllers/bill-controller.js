@@ -344,7 +344,8 @@ const getBill = async (req, res) => {
   .populate("vendor"); 
 
     
-    console.log("Retrieved bill:" , bill);
+    // console.log("Retrieved bill:" , bill);
+    console.log("Retrieved bill nature of work:" , bill?.natureOfWork);
     if (!bill) {
       return res.status(404).json({ message: "Bill not found" });
     }

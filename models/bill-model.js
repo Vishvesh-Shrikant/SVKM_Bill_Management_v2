@@ -264,8 +264,8 @@ const billSchema = new mongoose.Schema(
             remarksAcctsDept: { type: String },
             status: {
                 type: String,
-                enum: [ "Paid", "UnPaid"],
-                default: "UnPaid",
+                enum: [ "Paid", "Unpaid"],
+                default: "Unpaid",
             },
         },
         billDate: { type: Date, required: true },
@@ -382,8 +382,8 @@ const billSchema = new mongoose.Schema(
 //             this.accountsDept.status = "Paid";
 //         }
 //     } else if (this.accountsDept && !this.accountsDept.status) {
-//         // Default payment status is UnPaid if not specified
-//         this.accountsDept.status = "UnPaid";
+//         // Default payment status is Unpaid if not specified
+//         this.accountsDept.status = "Unpaid";
 //     }
 
 //     // Fix any date fields that are in string format
