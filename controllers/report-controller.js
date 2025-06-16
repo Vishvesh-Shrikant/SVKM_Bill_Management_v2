@@ -339,7 +339,7 @@ export const getInvoicesCourierToMumbai = async (req, res) => {
     console.log("Filter being used:", JSON.stringify(filter, null, 2));
     
     // Fetch bills from database, sort by sr no
-    const invoices = await Bill.find(filter).sort({ "srNo": 1 });
+    const invoices = await Bill.find(filter).sort({ "srNo": 1 }).populate('vendor');
     
     console.log(`Found ${invoices.length} invoices couriered to Mumbai`);
     
@@ -437,7 +437,7 @@ export const getInvoicesReceivedAtMumbai = async (req, res) => {
     console.log("Filter being used:", JSON.stringify(filter, null, 2));
     
     // Fetch bills from database, sort by sr no
-    const invoices = await Bill.find(filter).sort({ "srNo": 1 });
+    const invoices = await Bill.find(filter).sort({ "srNo": 1 }).populate('vendor');
     
     console.log(`Found ${invoices.length} invoices received at Mumbai but not sent to accounts department`);
     
@@ -534,7 +534,7 @@ export const getInvoicesGivenToAcctsDept = async (req, res) => {
     console.log("Filter being used:", JSON.stringify(filter, null, 2));
     
     // Fetch bills from database, sort by sr no
-    const invoices = await Bill.find(filter).sort({ "srNo": 1 });
+    const invoices = await Bill.find(filter).sort({ "srNo": 1 }).populate('vendor');
     
     console.log(`Found ${invoices.length} invoices given to accounts department`);
     
@@ -634,7 +634,7 @@ export const getInvoicesGivenToQsSite = async (req, res) => {
     console.log("Filter being used:", JSON.stringify(filter, null, 2));
     
     // Fetch bills from database, sort by sr no
-    const invoices = await Bill.find(filter).sort({ "srNo": 1 });
+    const invoices = await Bill.find(filter).sort({ "srNo": 1 }).populate('vendor');
     
     console.log(`Found ${invoices.length} invoices given to QS site`);
     
@@ -736,7 +736,7 @@ export const getInvoicesPaid = async (req, res) => {
     console.log("Filter being used:", JSON.stringify(filter, null, 2));
     
     // Fetch bills from database, sort by sr no
-    const invoices = await Bill.find(filter).sort({ "srNo": 1 });
+    const invoices = await Bill.find(filter).sort({ "srNo": 1 }).populate('vendor');
     
     console.log(`Found ${invoices.length} invoices Paid`);
     
@@ -761,7 +761,7 @@ export const getInvoicesPaid = async (req, res) => {
       return {
         srNo: bill.srNo || "N/A",
         projectDescription: bill.projectDescription || "N/A",
-        vendorName: bill.vendorName || "N/A",
+        vendorName: bill.vendor?.vendorName || "N/A",
         taxInvNo: bill.taxInvNo || "N/A",
         taxInvDate: formatDate(bill.taxInvDate) || "N/A",
         taxInvAmt: !isNaN(taxInvAmt) ? Number(taxInvAmt.toFixed(2)) : 0,
@@ -842,7 +842,7 @@ export const getPendingBillsReport = async (req, res) => {
     console.log("Filter being used:", JSON.stringify(filter, null, 2));
     
     // Fetch bills from database, sort by sr no
-    const pendingBills = await Bill.find(filter).sort({ "srNo": 1 });
+    const pendingBills = await Bill.find(filter).sort({ "srNo": 1 }).populate('vendor');
     
     console.log(`Found ${pendingBills.length} pending bills`);
     
@@ -863,7 +863,7 @@ export const getPendingBillsReport = async (req, res) => {
       return {
         srNo: bill.srNo || "N/A",
         projectDescription: bill.projectDescription || "N/A",
-        vendorName: bill.vendorName || "N/A",
+        vendorName: bill.vendor?.vendorName || "N/A",
         invoiceNo: bill.taxInvNo || "N/A",
         invoiceDate: formatDate(bill.taxInvDate) || "N/A",
         invoiceAmount: !isNaN(invoiceAmount) ? Number(invoiceAmount.toFixed(2)) : 0,
@@ -961,7 +961,7 @@ export const getBillJourney = async (req, res) => {
     }
     
     // Fetch bills from database, sort by sr no
-    const bills = await Bill.find(filter).sort({ "srNo": 1 });
+    const bills = await Bill.find(filter).sort({ "srNo": 1 }).populate('vendor');
     
     console.log(`Found ${bills.length} bills for journey report after applying filters`);
     
@@ -980,7 +980,7 @@ export const getBillJourney = async (req, res) => {
           };
         }
       }
-      const relaxedBills = await Bill.find(relaxedFilter).limit(10);
+      const relaxedBills = await Bill.find(relaxedFilter).limit(10).populate('vendor');
       console.log(`Found ${relaxedBills.length} bills with relaxed query`);
       
       if (relaxedBills.length > 0) {
@@ -1072,7 +1072,7 @@ export const getBillJourney = async (req, res) => {
         srNo: bill.srNo || "N/A",
         region: bill.region || "N/A",
         projectDescription: bill.projectDescription || "N/A",
-        vendorName: bill.vendorName || "N/A",
+        vendorName: bill.vendor?.vendorName || "N/A",
         invoiceDate: formatDate(bill.taxInvDate) || "N/A",
         invoiceAmount: !isNaN(invoiceAmount) ? Number(invoiceAmount.toFixed(2)) : 0,
         delay_for_receiving_invoice,

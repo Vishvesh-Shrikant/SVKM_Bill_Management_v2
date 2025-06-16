@@ -60,7 +60,6 @@ router.get('/invoices-courier-to-mumbai',
  * @access Private (PIMO Mumbai roles only)
  */
 router.get('/invoices-received-at-mumbai', 
-  authorize('pimo_mumbai'), 
   getInvoicesReceivedAtMumbai
 );
 
@@ -70,7 +69,6 @@ router.get('/invoices-received-at-mumbai',
  * @access Private (PIMO Mumbai and accounts roles only)
  */
 router.get('/invoices-given-to-accounts', 
-  authorize(['pimo_mumbai', 'accounts']), 
   getInvoicesGivenToAcctsDept
 );
 
@@ -80,7 +78,6 @@ router.get('/invoices-given-to-accounts',
  * @access Private (Site PIMO and QS site roles only)
  */
 router.get('/invoices-given-to-qs-site', 
-  authorize(['site_pimo', 'qs_site']), 
   getInvoicesGivenToQsSite
 );
 
@@ -90,7 +87,6 @@ router.get('/invoices-given-to-qs-site',
  * @access Private (Accounts department only)
  */
 router.get('/invoices-Paid', 
-  authorize('accounts'), 
   getInvoicesPaid
 );
 
