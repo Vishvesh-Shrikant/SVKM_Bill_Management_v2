@@ -1,6 +1,7 @@
 import { generateExcelReport, generatePDFReport } from "../utils/report-generator.js";
 // Update imports to use the split CSV utility files
 import {  importBillsFromExcel } from "../utils/csv-import.js";
+import { extractPatchRowsFromExcel, patchBillsFromExcelFile } from '../utils/csv-patch-extract.js';
 
 import mongoose from "mongoose";
 import multer from "multer";
@@ -419,6 +420,7 @@ const importBills = async (req, res) => {
 // Function to patch bills from Excel/CSV without creating new records
 const patchBillsFromExcel = async (req, res) => {
   try {
+    console.log('[PATCH DEBUG] patchBillsFromExcel called');
     await new Promise((resolve, reject) => {
       upload(req, res, (err) => {
         if (err instanceof multer.MulterError) {
@@ -436,91 +438,26 @@ const patchBillsFromExcel = async (req, res) => {
         }
       });
     });
-    
     if (!req.files || !req.files.length) {
       return res.status(400).json({
         success: false,
         message: "No file uploaded"
       });
     }
-    
-    const uploadedFile = req.files[0]; // Get the first uploaded file
+    const uploadedFile = req.files[0];
     const tempDir = os.tmpdir();
     const tempFilePath = path.join(tempDir, uploadedFile.originalname);
     console.log(`Processing file for patch: ${uploadedFile.originalname}`);
-    
-    // Write buffer to temporary file
     fs.writeFileSync(tempFilePath, uploadedFile.buffer);
-    
-    // Check if VendorMaster model is available and validate vendors
-    const skipVendorValidation = await shouldSkipVendorValidation();
-    let validVendorNames = [];
-    
-    if (!skipVendorValidation && VendorMaster) {
-      try {
-        // Get all vendors from database and use their names for validation
-        const allVendors = await VendorMaster.find().lean();
-        validVendorNames = allVendors.map(v => v.vendorName || '');
-        console.log(`Found ${validVendorNames.length} valid vendor names for validation`);
-        
-        if (validVendorNames.length > 0) {
-          console.log(`Sample vendor names: ${validVendorNames.slice(0, 5).join(', ')}${validVendorNames.length > 5 ? '...' : ''}`);
-        }
-      } catch (error) {
-        console.error('Error fetching vendors:', error);
-      }
+    // Call the patch logic
+    const patchResult = await patchBillsFromExcelFile(tempFilePath);
+    if (fs.existsSync(tempFilePath)) {
+      fs.unlinkSync(tempFilePath);
     }
-    
-    // Use the patchOnly option in importBillsFromExcel to ensure we only update existing bills
-    const fileExtension = path.extname(uploadedFile.originalname).toLowerCase();
-    let importResult;
-    
-    try {
-      if (fileExtension === '.csv') {
-        // For now, we don't support CSV directly for patch
-        // This could be enhanced in the future
-        return res.status(400).json({
-          success: false,
-          message: "CSV patching is not supported yet. Please use Excel format."
-        });
-      } else if (fileExtension === '.xlsx' || fileExtension === '.xls') {
-        importResult = await importBillsFromExcel(tempFilePath, validVendorNames, true);
-      } else {
-        throw new Error("Unsupported file format");
-      }
-    } finally {
-      // Clean up temp file
-      if (fs.existsSync(tempFilePath)) {
-        fs.unlinkSync(tempFilePath);
-      }
-    }
-    
-    // UPDATED: Combine already existing bills that were updated into the updated count
-    const updatedCount = importResult.updated || 0;
-    const updatedExistingCount = importResult.alreadyExistingBills?.filter(b => b.updating).length || 0;
-    const totalUpdated = updatedCount + updatedExistingCount;
-    
     return res.status(200).json({
       success: true,
-      message: `Successfully patched ${totalUpdated} bills`,
-      details: {
-        updated: totalUpdated,
-        skipped: importResult.nonExistentVendors.length,
-        total: importResult.totalProcessed + totalUpdated
-      },
-      data: {
-        updated: [
-          ...(Array.isArray(importResult.updated) ? importResult.updated.map(bill => ({ 
-            _id: bill._id, 
-            srNo: bill.srNo 
-          })) : []),
-          ...(importResult.alreadyExistingBills?.filter(b => b.updating).map(bill => ({ 
-            _id: bill._id, 
-            srNo: bill.srNo 
-          })) || [])
-        ],
-        skipped: importResult.nonExistentVendors
-      }
+      message: 'Patch process complete',
+      details: patchResult
     });
   } catch (error) {
     console.error('Patch error:', error);
