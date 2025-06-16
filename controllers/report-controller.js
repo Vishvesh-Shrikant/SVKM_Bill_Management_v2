@@ -1,4 +1,5 @@
 import Bill from '../models/bill-model.js';
+import VendorMaster from '../models/vendor-master-model.js';
 
 // helper for calculating eod
 const endOfDay = (dateString) => {
@@ -40,8 +41,10 @@ export const getOutstandingBillsReport = async (req, res) => {
     
     console.log("Filter being used:", JSON.stringify(filter, null, 2));
     
-    // Fetch outstanding bills from database
-    const outstandingBills = await Bill.find(filter).sort({ "vendorName": 1, "taxInvDate": 1 });
+    // Fetch outstanding bills from database, and populate vendor
+    const outstandingBills = await Bill.find(filter)
+      .sort({ "vendorName": 1, "taxInvDate": 1 })
+      .populate('vendor');
     
     console.log(`Found ${outstandingBills.length} outstanding bills`);
     
@@ -49,7 +52,8 @@ export const getOutstandingBillsReport = async (req, res) => {
     const vendorGroups = {};
     
     outstandingBills.forEach(bill => {
-      const vendorName = bill.vendorName;
+      // Use vendor name from populated vendor object
+      const vendorName = bill.vendor?.vendorName || 'N/A';
       if (!vendorGroups[vendorName]) {
         vendorGroups[vendorName] = [];
       }
@@ -110,8 +114,8 @@ export const getOutstandingBillsReport = async (req, res) => {
         vendorGroup.bills.push({
           srNo: index++,
           region: bill.region || "N/A",
-          vendorNo: bill.vendorNo || "N/A",
-          vendorName: bill.vendorName || "N/A",
+          vendorNo: bill.vendor?.vendorNo || "N/A",
+          vendorName: bill.vendor?.vendorName || "N/A",
           taxInvNo: bill.taxInvNo || "N/A",
           taxInvDate: formatDate(bill.taxInvDate) || "N/A",
           taxInvAmt: !isNaN(taxInvAmt) ? Number(taxInvAmt.toFixed(2)) : 0,
@@ -231,8 +235,10 @@ export const getInvoicesReceivedAtSite = async (req, res) => {
     
     console.log("Filter being used:", JSON.stringify(filter, null, 2));
     
-    // Fetch bills from database, sort by date received at site
-    const invoices = await Bill.find(filter).sort({ "taxInvRecdAtSite": 1 });
+    // Fetch bills from database, sort by date received at site, and populate vendor
+    const invoices = await Bill.find(filter)
+      .sort({ "taxInvRecdAtSite": 1 })
+      .populate('vendor');
     
     console.log(`Found ${invoices.length} invoices received at site but not sent to Mumbai`);
     
@@ -246,20 +252,20 @@ export const getInvoicesReceivedAtSite = async (req, res) => {
     
     // Process data for response
     let totalAmount = 0;
-    const reportData = invoices.map((bill, index) => {
-      const taxInvAmt = parseFloat(bill.taxInvAmt || 0);
-      totalAmount += !isNaN(taxInvAmt) ? taxInvAmt : 0;
-      
-      return {
-        srNo: index + 1,
+    const reportData = [];
+    invoices.forEach((bill, idx) => {
+      const taxInvAmt = parseFloat(bill.taxInvAmt);
+      if (!isNaN(taxInvAmt)) totalAmount += taxInvAmt;
+      reportData.push({
+        srNo: idx + 1,
         projectDescription: bill.projectDescription || "N/A",
-        vendorName: bill.vendorName || "N/A",
+        vendorName: bill.vendor?.vendorName || "N/A",
         taxInvNo: bill.taxInvNo || "N/A",
         taxInvDate: formatDate(bill.taxInvDate) || "N/A",
         taxInvAmt: !isNaN(taxInvAmt) ? Number(taxInvAmt.toFixed(2)) : 0,
         dtTaxInvRecdAtSite: formatDate(bill.taxInvRecdAtSite) || "N/A",
         poNo: bill.poNo || "N/A"
-      };
+      });
     });
     
     // Prepare the final response
