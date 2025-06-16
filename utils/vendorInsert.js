@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
-import VendorMaster from "./models/vendor-master-model.js";
-import {connectDB} from "./utils/db.js"; // Adjust the path as necessary
+import VendorMaster from "../models/vendor-master-model.js";
+import {connectDB} from "./db.js"; // Adjust the path as necessary
 
 // Vendor data from your table
 const vendorDetails = [

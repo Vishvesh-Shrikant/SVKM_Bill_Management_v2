@@ -244,11 +244,11 @@ export const organizeQSFields = (data) => {
   // Check if we have QS-related fields that need to be organized
   const qsFieldMappings = {
     "Dt given to QS for Inspection": { target: "qsInspection", property: "dateGiven" },
-    "Name of QS": { target: "qsInspection", property: "name" },
+    "Name of QS": { target: "qsInspection", property: "name" }, // This maps to qsInspection.name
     "Checked  by QS with Dt of Measurment": { target: "qsMeasurementCheck", property: "dateGiven" },
     "Given to vendor-Query/Final Inv": { target: "vendorFinalInv", property: "dateGiven" },
-    "Dt given to QS for COP": { target: "qsCOP", property: "dateGiven" },
-    "Name - QS": { target: "qsCOP", property: "name" }
+    "Dt given to QS for COP": { target: "qsCOP", property: "dateGiven" }, // Correctly maps to qsCOP.dateGiven
+    "Name - QS": { target: "qsCOP", property: "name" } // This maps to qsCOP.name
   };
   
   // Initialize the target objects if not already present
@@ -313,6 +313,11 @@ export const convertTypes = (data) => {
     result.taxInvAmt = parseAmount(result.taxInvAmt);
   }
   
+  // Store the original "Type of inv" value if it exists, before it's potentially replaced by an ID
+  if (data.typeOfInv) { // 'data' here refers to the original rowData passed to convertTypes
+    result.originalTypeOfInv = data.typeOfInv;
+  }
+
   if (result.advanceAmt && typeof result.advanceAmt === 'string') {
     result.advanceAmt = parseAmount(result.advanceAmt);
   }

@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
-import NatureOfWorkMaster from "./models/nature-of-work-master-model.js";
-import {connectDB} from "./utils/db.js";
+import NatureOfWorkMaster from "../models/nature-of-work-master-model.js";
+import {connectDB} from "./db.js";
 
 const works = [
   { natureOfWork: "Proforma Invoice" },

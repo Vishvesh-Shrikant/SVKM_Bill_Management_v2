@@ -42,7 +42,7 @@ const userSchema = new mongoose.Schema(
       ],
       default: ["viewer"],
     },
-    //one user can have multiple deptartments
+    //removed from everywhere keeping here, so that somewhere doesnt stop working
     department: {
       type: [String],
       enum: ["Site", "PIMO", "QS", "IT", "Accounts", "Management", "Admin"],

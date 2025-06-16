@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
-import ComplianceMaster from "./models/compliance-master-model.js";
-import {connectDB} from "./utils/db.js";
+import ComplianceMaster from "../models/compliance-master-model.js";
+import {connectDB} from "./db.js";
 
 const compliances = [
   { compliance206AB: "206AB check on website" },

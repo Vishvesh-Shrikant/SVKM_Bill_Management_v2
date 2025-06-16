@@ -53,7 +53,7 @@ app.use("/kpi", kpiRoute);
 
 // Swagger docs route
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-app.use("/", (req, res) => {
+app.use("/health", (req, res) => {
     res.status(200).json({
         success: true,
         message: "OK",

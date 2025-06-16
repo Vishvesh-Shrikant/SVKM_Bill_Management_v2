@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
-import CurrencyMaster from "./models/currency-master-model.js";
-import {connectDB} from "./utils/db.js";
+import CurrencyMaster from "../models/currency-master-model.js";
+import {connectDB} from "./db.js";
 
 const currencies = [
   { currency: "INR" },

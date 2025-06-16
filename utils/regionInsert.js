@@ -1,7 +1,7 @@
 // insertRegions.js
 import mongoose from "mongoose";
-import RegionMaster from "./models/region-master-model.js";
-import { connectDB } from "./utils/db.js";
+import RegionMaster from "../models/region-master-model.js";
+import { connectDB } from "./db.js";
 const regions = [
   "MUMBAI",
   "KHARGHAR",

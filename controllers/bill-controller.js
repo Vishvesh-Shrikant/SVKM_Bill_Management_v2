@@ -332,24 +332,19 @@ const getBill = async (req, res) => {
     // Check for srNo in body or query, and if it is exactly 7 digits
     const srNo = req.body.srNo || req.query.srNo;
     let bill;
-    if (srNo && /^\d{7}$/.test(srNo)) {
-      bill = await Bill.findOne({ srNo })
-        .populate("region")
-        .populate("panStatus")
-        .populate("currency")
-        .populate("natureOfWork")
-        .populate("compliance206AB")
-        .populate("vendor"); // Populate vendor details
-    } else {
-      bill = await Bill.findById(req.params.id)
-        .populate("region")
-        .populate("panStatus")
-        .populate("currency")
-        .populate("natureOfWork")
-        .populate("compliance206AB")
-        .populate("vendor"); 
-    }
-    console.log("Retrieved bill:");
+
+    let nbill = await Bill.findById(req.params.id);
+    console.log("Bill without masters", nbill);
+   
+    bill = await Bill.findById(req.params.id).populate("region")
+  .populate("panStatus")
+  .populate("currency")
+  .populate("natureOfWork")
+  .populate("compliance206AB")
+  .populate("vendor"); 
+
+    
+    console.log("Retrieved bill:" , bill);
     if (!bill) {
       return res.status(404).json({ message: "Bill not found" });
     }
@@ -376,6 +371,7 @@ const getBill = async (req, res) => {
       billObj.complianceStatus = billObj.vendor.complianceStatus;
       billObj.PANStatus = billObj.vendor.PANStatus;
     }
+    console.log("Bill object vendor:", billObj.vendor);
     // Remove the vendor object itself
     delete billObj.vendor;
     res.status(200).json(billObj);
@@ -1011,7 +1007,8 @@ export const getBillBySrNo = async (req, res) => {
       .populate("panStatus")
       .populate("currency")
       .populate("natureOfWork")
-      .populate("compliance206AB");
+      .populate("compliance206AB")
+      .populate("vendor"); // Populate vendor details
     if (!bill) {
       return res.status(404).json({ message: "Bill not found" });
     }
