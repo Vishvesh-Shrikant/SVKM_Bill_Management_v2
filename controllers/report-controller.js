@@ -110,9 +110,8 @@ export const getOutstandingBillsReport = async (req, res) => {
 
         totalInvoiceAmount += !isNaN(taxInvAmt) ? taxInvAmt : 0;
         totalCopAmount += !isNaN(copAmt) ? copAmt : 0;
-        
-        vendorGroup.bills.push({
-          srNo: index++,
+          vendorGroup.bills.push({
+          srNo: bill.srNo,
           region: bill.region || "N/A",
           vendorNo: bill.vendor?.vendorNo || "N/A",
           vendorName: bill.vendor?.vendorName || "N/A",
@@ -122,7 +121,8 @@ export const getOutstandingBillsReport = async (req, res) => {
           copAmt: !isNaN(parseFloat(bill.copDetails?.amount)) ? 
             Number(parseFloat(bill.copDetails.amount).toFixed(2)) : 0,
           dateRecdInAcctsDept: formatDate(bill.accountsDept?.dateReceived) || "N/A",
-          natureOfWorkSupply: bill.natureOfWork || "N/A"
+          paymentInstructions: bill.accountsDept.paymentInstructions || "N/A",
+          remarksForPaymentInstructions: bill.accountsDept.remarksForPayInstructions || "N/A"
         });
       });
       
@@ -210,7 +210,7 @@ export const getOutstandingBillsReport = async (req, res) => {
 export const getInvoicesReceivedAtSite = async (req, res) => {
   try {
     // Parse query parameters for filtering
-    const { startDate, endDate, region } = req.query;
+    const { startDate, endDate, region, vendor } = req.query;
     
     // Build filter object based on actual bill schema
     const filter = {
@@ -233,14 +233,41 @@ export const getInvoicesReceivedAtSite = async (req, res) => {
       filter["region"] = region;
     }
     
+    // Add vendor filter if provided
+    if (vendor) {
+      filter["vendorName"] = vendor;
+    }
+    
     console.log("Filter being used:", JSON.stringify(filter, null, 2));
     
-    // Fetch bills from database, sort by date received at site, and populate vendor
-    const invoices = await Bill.find(filter)
-      .sort({ "taxInvRecdAtSite": 1 })
+    // Fetch invoices received at site from database and populate vendor
+    const invoicesReceivedAtSite = await Bill.find(filter)
+      .sort({ "vendorName": 1, "taxInvRecdAtSite": 1 })
       .populate('vendor');
     
-    console.log(`Found ${invoices.length} invoices received at site but not sent to Mumbai`);
+    console.log(`Found ${invoicesReceivedAtSite.length} invoices received at site`);
+    
+    // Group bills by vendor name
+    const vendorGroups = {};
+    
+    invoicesReceivedAtSite.forEach(bill => {
+      // Use vendor name from populated vendor object
+      const vendorName = bill.vendor?.vendorName || 'N/A';
+      if (!vendorGroups[vendorName]) {
+        vendorGroups[vendorName] = [];
+      }
+      vendorGroups[vendorName].push(bill);
+    });
+    
+    // Sort vendor names alphabetically
+    const sortedVendorNames = Object.keys(vendorGroups).sort();
+    
+    // Create the report data with grouped and sorted vendors
+    let index = 1;
+    let reportData = [];
+    let totalInvoiceAmount = 0;
+    let totalCopAmount = 0;
+    let totalCount = 0;
     
     // Format date strings properly
     const formatDate = (dateValue) => {
@@ -250,41 +277,102 @@ export const getInvoicesReceivedAtSite = async (req, res) => {
         `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
     };
     
-    // Process data for response
-    let totalAmount = 0;
-    const reportData = [];
-    invoices.forEach((bill, idx) => {
-      const taxInvAmt = parseFloat(bill.taxInvAmt);
-      if (!isNaN(taxInvAmt)) totalAmount += taxInvAmt;
-      reportData.push({
-        srNo: idx + 1,
-        projectDescription: bill.projectDescription || "N/A",
-        vendorName: bill.vendor?.vendorName || "N/A",
-        taxInvNo: bill.taxInvNo || "N/A",
-        taxInvDate: formatDate(bill.taxInvDate) || "N/A",
-        taxInvAmt: !isNaN(taxInvAmt) ? Number(taxInvAmt.toFixed(2)) : 0,
-        dtTaxInvRecdAtSite: formatDate(bill.taxInvRecdAtSite) || "N/A",
-        poNo: bill.poNo || "N/A"
+    sortedVendorNames.forEach(vendorName => {
+      const vendorBills = vendorGroups[vendorName];
+      let vendorSubtotal = 0;
+      let vendorCopSubtotal = 0;
+      const billCount = vendorBills.length;
+      totalCount += billCount;
+      
+      // Sort bills within each vendor group by date received at site
+      vendorBills.sort((a, b) => {
+        if (a.taxInvRecdAtSite && b.taxInvRecdAtSite) {
+          return new Date(a.taxInvRecdAtSite) - new Date(b.taxInvRecdAtSite);
+        }
+        return 0;
       });
+      
+      // Add each bill from this vendor to the report data
+      vendorBills.forEach(bill => {
+        const taxInvAmt = parseFloat(bill.taxInvAmt || 0);
+        const copAmt = parseFloat(bill.copDetails?.amount || 0);
+
+        vendorSubtotal += !isNaN(taxInvAmt) ? taxInvAmt : 0;
+        vendorCopSubtotal += !isNaN(copAmt) ? copAmt : 0;
+
+        totalInvoiceAmount += !isNaN(taxInvAmt) ? taxInvAmt : 0;
+        totalCopAmount += !isNaN(copAmt) ? copAmt : 0;
+        
+        reportData.push({
+          srNo: bill.srNo,
+          region: bill.region || "N/A",
+          vendorNo: bill.vendor?.vendorNo || "N/A",
+          vendorName: bill.vendor?.vendorName || "N/A",
+          taxInvNo: bill.taxInvNo || "N/A",
+          taxInvDate: formatDate(bill.taxInvDate) || "N/A",
+          taxInvAmt: !isNaN(taxInvAmt) ? Number(taxInvAmt.toFixed(2)) : 0,
+          copAmt: !isNaN(parseFloat(bill.copDetails?.amount)) ? 
+            Number(parseFloat(bill.copDetails.amount).toFixed(2)) : 0,
+          dtTaxInvRecdAtSite: formatDate(bill.taxInvRecdAtSite) || "N/A",
+          poNo: bill.poNo || "N/A",
+          natureOfWorkSupply: bill.natureOfWork || "N/A"
+        });
+      });
+      
+      // Add subtotal row after each vendor's bills
+      reportData.push({
+        isSubtotal: true,
+        vendorName: vendorName,
+        subtotalLabel: `Subtotal for ${vendorName}:`,
+        subtotalAmount: Number(vendorSubtotal.toFixed(2)),
+        subtotalCopAmt: Number(vendorCopSubtotal.toFixed(2)),
+        count: billCount
+      });
+    });
+    
+    // Add grand total row
+    reportData.push({
+      isGrandTotal: true,
+      grandTotalLabel: "Grand Total:",
+      grandTotalAmount: Number(totalInvoiceAmount.toFixed(2)),
+      grandTotalCopAmt: Number(totalCopAmount.toFixed(2)),
+      totalCount: totalCount
+    });
+    
+    // Calculate vendor subtotals for summary section
+    const vendorSubtotals = sortedVendorNames.map(vendorName => {
+      const vendorBills = vendorGroups[vendorName];
+      const totalAmount = vendorBills.reduce((sum, bill) => {
+        const amount = parseFloat(bill.taxInvAmt || 0);
+        return sum + (isNaN(amount) ? 0 : amount);
+      }, 0);
+      const totalCopAmount = vendorBills.reduce((sum, bill) => {
+        const copAmount = parseFloat(bill.copDetails?.amount || 0);
+        return sum + (isNaN(copAmount) ? 0 : copAmount);
+      }, 0);
+      return { 
+        vendorName, 
+        totalAmount: Number(totalAmount.toFixed(2)),
+        totalCopAmount: Number(totalCopAmount.toFixed(2)),
+        count: vendorBills.length
+      };
     });
     
     // Prepare the final response
     const response = {
       report: {
-        title: "Invoices received at site",
+        title: "Invoices Received at Site Report",
         generatedAt: new Date().toISOString(),
-        selectionCriteria: {
-          dateRange: startDate && endDate ? `from ${startDate} to ${endDate}` : "All dates",
-          region: region || "All regions"
+        filterCriteria: {
+          logic: "date of tax invoice received at site is filled and sent to Mumbai is blank",
+          sorting: ["vendorName", "dateReceivedAtSite"]
         },
-        sortingCriteria: [
-          "Date Tax Invoice received at Site"
-        ],
-        filterLogic: "Date of tax invoice received at site should be filled AND Sent to Mumbai should be blank",
         data: reportData,
         summary: {
-          totalCount: reportData.length,
-          totalAmount: Number(totalAmount.toFixed(2))
+          vendorSubtotals,
+          totalInvoiceAmount: Number(totalInvoiceAmount.toFixed(2)),
+          totalCopAmount: Number(totalCopAmount.toFixed(2)),
+          recordCount: totalCount
         }
       }
     };
@@ -308,7 +396,7 @@ export const getInvoicesReceivedAtSite = async (req, res) => {
 export const getInvoicesCourierToMumbai = async (req, res) => {
   try {
     // Parse query parameters for filtering
-    const { startDate, endDate, region, nameSiteOffice } = req.query;
+    const { startDate, endDate, region, nameSiteOffice, vendor } = req.query;
     
     // Build filter object based on actual bill schema
     const filter = {
@@ -336,12 +424,41 @@ export const getInvoicesCourierToMumbai = async (req, res) => {
       filter["siteOfficeDispatch.name"] = nameSiteOffice;
     }
     
+    // Add vendor filter if provided
+    if (vendor) {
+      filter["vendorName"] = vendor;
+    }
+    
     console.log("Filter being used:", JSON.stringify(filter, null, 2));
     
-    // Fetch bills from database, sort by sr no
-    const invoices = await Bill.find(filter).sort({ "srNo": 1 }).populate('vendor');
+    // Fetch invoices couriered to Mumbai from database and populate vendor
+    const invoicesCourierToMumbai = await Bill.find(filter)
+      .sort({ "vendorName": 1, "siteOfficeDispatch.dateGiven": 1 })
+      .populate('vendor');
     
-    console.log(`Found ${invoices.length} invoices couriered to Mumbai`);
+    console.log(`Found ${invoicesCourierToMumbai.length} invoices couriered to Mumbai`);
+    
+    // Group bills by vendor name
+    const vendorGroups = {};
+    
+    invoicesCourierToMumbai.forEach(bill => {
+      // Use vendor name from populated vendor object
+      const vendorName = bill.vendor?.vendorName || 'N/A';
+      if (!vendorGroups[vendorName]) {
+        vendorGroups[vendorName] = [];
+      }
+      vendorGroups[vendorName].push(bill);
+    });
+    
+    // Sort vendor names alphabetically
+    const sortedVendorNames = Object.keys(vendorGroups).sort();
+    
+    // Create the report data with grouped and sorted vendors
+    let index = 1;
+    let reportData = [];
+    let totalInvoiceAmount = 0;
+    let totalCopAmount = 0;
+    let totalCount = 0;
     
     // Format date strings properly
     const formatDate = (dateValue) => {
@@ -351,43 +468,103 @@ export const getInvoicesCourierToMumbai = async (req, res) => {
         `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
     };
     
-    // Process data for response
-    let totalAmount = 0;
-    const reportData = invoices.map((bill) => {
-      const taxInvAmt = parseFloat(bill.taxInvAmt || 0);
-      totalAmount += !isNaN(taxInvAmt) ? taxInvAmt : 0;
+    sortedVendorNames.forEach(vendorName => {
+      const vendorBills = vendorGroups[vendorName];
+      let vendorSubtotal = 0;
+      let vendorCopSubtotal = 0;
+      const billCount = vendorBills.length;
+      totalCount += billCount;
       
-      return {
-        srNo: bill.srNo || "N/A",
-        projectDescription: bill.projectDescription || "N/A",
-        vendorName: bill.vendorName || "N/A",
-        taxInvNo: bill.taxInvNo || "N/A",
-        taxInvDate: formatDate(bill.taxInvDate) || "N/A",
-        taxInvAmt: !isNaN(taxInvAmt) ? Number(taxInvAmt.toFixed(2)) : 0,
-        dtTaxInvRecdAtSite: formatDate(bill.taxInvRecdAtSite) || "N/A",
-        dtTaxInvCourierToMumbai: formatDate(bill.siteOfficeDispatch?.dateGiven) || "N/A",
-        poNo: bill.poNo || "N/A"
+      // Sort bills within each vendor group by courier date
+      vendorBills.sort((a, b) => {
+        if (a.siteOfficeDispatch?.dateGiven && b.siteOfficeDispatch?.dateGiven) {
+          return new Date(a.siteOfficeDispatch.dateGiven) - new Date(b.siteOfficeDispatch.dateGiven);
+        }
+        return 0;
+      });
+      
+      // Add each bill from this vendor to the report data
+      vendorBills.forEach(bill => {
+        const taxInvAmt = parseFloat(bill.taxInvAmt || 0);
+        const copAmt = parseFloat(bill.copDetails?.amount || 0);
+
+        vendorSubtotal += !isNaN(taxInvAmt) ? taxInvAmt : 0;
+        vendorCopSubtotal += !isNaN(copAmt) ? copAmt : 0;
+
+        totalInvoiceAmount += !isNaN(taxInvAmt) ? taxInvAmt : 0;
+        totalCopAmount += !isNaN(copAmt) ? copAmt : 0;
+        
+        reportData.push({
+          srNo: bill.srNo,
+          region: bill.region || "N/A",
+          vendorNo: bill.vendor?.vendorNo || "N/A",
+          vendorName: bill.vendor?.vendorName || "N/A",
+          taxInvNo: bill.taxInvNo || "N/A",
+          taxInvDate: formatDate(bill.taxInvDate) || "N/A",
+          taxInvAmt: !isNaN(taxInvAmt) ? Number(taxInvAmt.toFixed(2)) : 0,
+          copAmt: !isNaN(parseFloat(bill.copDetails?.amount)) ? 
+            Number(parseFloat(bill.copDetails.amount).toFixed(2)) : 0,
+          dtTaxInvRecdAtSite: formatDate(bill.taxInvRecdAtSite) || "N/A",
+          dtTaxInvCourierToMumbai: formatDate(bill.siteOfficeDispatch?.dateGiven) || "N/A",
+          poNo: bill.poNo || "N/A",
+          natureOfWorkSupply: bill.natureOfWork || "N/A"
+        });
+      });
+      
+      // Add subtotal row after each vendor's bills
+      reportData.push({
+        isSubtotal: true,
+        vendorName: vendorName,
+        subtotalLabel: `Subtotal for ${vendorName}:`,
+        subtotalAmount: Number(vendorSubtotal.toFixed(2)),
+        subtotalCopAmt: Number(vendorCopSubtotal.toFixed(2)),
+        count: billCount
+      });
+    });
+    
+    // Add grand total row
+    reportData.push({
+      isGrandTotal: true,
+      grandTotalLabel: "Grand Total:",
+      grandTotalAmount: Number(totalInvoiceAmount.toFixed(2)),
+      grandTotalCopAmt: Number(totalCopAmount.toFixed(2)),
+      totalCount: totalCount
+    });
+    
+    // Calculate vendor subtotals for summary section
+    const vendorSubtotals = sortedVendorNames.map(vendorName => {
+      const vendorBills = vendorGroups[vendorName];
+      const totalAmount = vendorBills.reduce((sum, bill) => {
+        const amount = parseFloat(bill.taxInvAmt || 0);
+        return sum + (isNaN(amount) ? 0 : amount);
+      }, 0);
+      const totalCopAmount = vendorBills.reduce((sum, bill) => {
+        const copAmount = parseFloat(bill.copDetails?.amount || 0);
+        return sum + (isNaN(copAmount) ? 0 : copAmount);
+      }, 0);
+      return { 
+        vendorName, 
+        totalAmount: Number(totalAmount.toFixed(2)),
+        totalCopAmount: Number(totalCopAmount.toFixed(2)),
+        count: vendorBills.length
       };
     });
     
     // Prepare the final response
     const response = {
       report: {
-        title: "Invoices courier to Mumbai",
+        title: "Invoices Couriered to Mumbai Report",
         generatedAt: new Date().toISOString(),
-        selectionCriteria: {
-          dateRange: startDate && endDate ? `from ${startDate} to ${endDate}` : "All dates",
-          region: region || "All regions",
-          nameSiteOffice: nameSiteOffice || "All site offices"
+        filterCriteria: {
+          logic: "date of tax invoice received at site is filled and sent to Mumbai is filled",
+          sorting: ["vendorName", "courierDate"]
         },
-        sortingCriteria: [
-          "Sr No (Column 1)"
-        ],
-        filterLogic: "Dt of tax invoice recd at site should be filled AND Sent to mumbai should be filled",
         data: reportData,
         summary: {
-          totalCount: reportData.length,
-          totalAmount: Number(totalAmount.toFixed(2))
+          vendorSubtotals,
+          totalInvoiceAmount: Number(totalInvoiceAmount.toFixed(2)),
+          totalCopAmount: Number(totalCopAmount.toFixed(2)),
+          recordCount: totalCount
         }
       }
     };
@@ -411,7 +588,7 @@ export const getInvoicesCourierToMumbai = async (req, res) => {
 export const getInvoicesReceivedAtMumbai = async (req, res) => {
   try {
     // Parse query parameters for filtering
-    const { startDate, endDate, region } = req.query;
+    const { startDate, endDate, region, vendor } = req.query;
     
     // Build filter object based on actual bill schema
     const filter = {
@@ -434,12 +611,41 @@ export const getInvoicesReceivedAtMumbai = async (req, res) => {
       filter["region"] = region;
     }
     
+    // Add vendor filter if provided
+    if (vendor) {
+      filter["vendorName"] = vendor;
+    }
+    
     console.log("Filter being used:", JSON.stringify(filter, null, 2));
     
-    // Fetch bills from database, sort by sr no
-    const invoices = await Bill.find(filter).sort({ "srNo": 1 }).populate('vendor');
+    // Fetch invoices received at Mumbai from database and populate vendor
+    const invoicesReceivedAtMumbai = await Bill.find(filter)
+      .sort({ "vendorName": 1, "pimoMumbai.dateReceived": 1 })
+      .populate('vendor');
     
-    console.log(`Found ${invoices.length} invoices received at Mumbai but not sent to accounts department`);
+    console.log(`Found ${invoicesReceivedAtMumbai.length} invoices received at Mumbai but not sent to accounts department`);
+    
+    // Group bills by vendor name
+    const vendorGroups = {};
+    
+    invoicesReceivedAtMumbai.forEach(bill => {
+      // Use vendor name from populated vendor object
+      const vendorName = bill.vendor?.vendorName || 'N/A';
+      if (!vendorGroups[vendorName]) {
+        vendorGroups[vendorName] = [];
+      }
+      vendorGroups[vendorName].push(bill);
+    });
+    
+    // Sort vendor names alphabetically
+    const sortedVendorNames = Object.keys(vendorGroups).sort();
+    
+    // Create the report data with grouped and sorted vendors
+    let index = 1;
+    let reportData = [];
+    let totalInvoiceAmount = 0;
+    let totalCopAmount = 0;
+    let totalCount = 0;
     
     // Format date strings properly
     const formatDate = (dateValue) => {
@@ -449,42 +655,103 @@ export const getInvoicesReceivedAtMumbai = async (req, res) => {
         `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
     };
     
-    // Process data for response
-    let totalAmount = 0;
-    const reportData = invoices.map((bill) => {
-      const taxInvAmt = parseFloat(bill.taxInvAmt || 0);
-      totalAmount += !isNaN(taxInvAmt) ? taxInvAmt : 0;
+    sortedVendorNames.forEach(vendorName => {
+      const vendorBills = vendorGroups[vendorName];
+      let vendorSubtotal = 0;
+      let vendorCopSubtotal = 0;
+      const billCount = vendorBills.length;
+      totalCount += billCount;
       
-      return {
-        srNo: bill.srNo || "N/A",
-        projectDescription: bill.projectDescription || "N/A",
-        vendorName: bill.vendorName || "N/A",
-        taxInvNo: bill.taxInvNo || "N/A",
-        taxInvDate: formatDate(bill.taxInvDate) || "N/A",
-        taxInvAmt: !isNaN(taxInvAmt) ? Number(taxInvAmt.toFixed(2)) : 0,
-        dtTaxInvRecdAtSite: formatDate(bill.taxInvRecdAtSite) || "N/A",
-        dtTaxInvRecdAtMumbai: formatDate(bill.pimoMumbai?.dateReceived) || "N/A",
-        poNo: bill.poNo || "N/A"
+      // Sort bills within each vendor group by date received at Mumbai
+      vendorBills.sort((a, b) => {
+        if (a.pimoMumbai?.dateReceived && b.pimoMumbai?.dateReceived) {
+          return new Date(a.pimoMumbai.dateReceived) - new Date(b.pimoMumbai.dateReceived);
+        }
+        return 0;
+      });
+      
+      // Add each bill from this vendor to the report data
+      vendorBills.forEach(bill => {
+        const taxInvAmt = parseFloat(bill.taxInvAmt || 0);
+        const copAmt = parseFloat(bill.copDetails?.amount || 0);
+
+        vendorSubtotal += !isNaN(taxInvAmt) ? taxInvAmt : 0;
+        vendorCopSubtotal += !isNaN(copAmt) ? copAmt : 0;
+
+        totalInvoiceAmount += !isNaN(taxInvAmt) ? taxInvAmt : 0;
+        totalCopAmount += !isNaN(copAmt) ? copAmt : 0;
+        
+        reportData.push({
+          srNo: bill.srNo,
+          region: bill.region || "N/A",
+          vendorNo: bill.vendor?.vendorNo || "N/A",
+          vendorName: bill.vendor?.vendorName || "N/A",
+          taxInvNo: bill.taxInvNo || "N/A",
+          taxInvDate: formatDate(bill.taxInvDate) || "N/A",
+          taxInvAmt: !isNaN(taxInvAmt) ? Number(taxInvAmt.toFixed(2)) : 0,
+          copAmt: !isNaN(parseFloat(bill.copDetails?.amount)) ? 
+            Number(parseFloat(bill.copDetails.amount).toFixed(2)) : 0,
+          dtTaxInvRecdAtSite: formatDate(bill.taxInvRecdAtSite) || "N/A",
+          dtTaxInvRecdAtMumbai: formatDate(bill.pimoMumbai?.dateReceived) || "N/A",
+          poNo: bill.poNo || "N/A",
+          natureOfWorkSupply: bill.natureOfWork || "N/A"
+        });
+      });
+      
+      // Add subtotal row after each vendor's bills
+      reportData.push({
+        isSubtotal: true,
+        vendorName: vendorName,
+        subtotalLabel: `Subtotal for ${vendorName}:`,
+        subtotalAmount: Number(vendorSubtotal.toFixed(2)),
+        subtotalCopAmt: Number(vendorCopSubtotal.toFixed(2)),
+        count: billCount
+      });
+    });
+    
+    // Add grand total row
+    reportData.push({
+      isGrandTotal: true,
+      grandTotalLabel: "Grand Total:",
+      grandTotalAmount: Number(totalInvoiceAmount.toFixed(2)),
+      grandTotalCopAmt: Number(totalCopAmount.toFixed(2)),
+      totalCount: totalCount
+    });
+    
+    // Calculate vendor subtotals for summary section
+    const vendorSubtotals = sortedVendorNames.map(vendorName => {
+      const vendorBills = vendorGroups[vendorName];
+      const totalAmount = vendorBills.reduce((sum, bill) => {
+        const amount = parseFloat(bill.taxInvAmt || 0);
+        return sum + (isNaN(amount) ? 0 : amount);
+      }, 0);
+      const totalCopAmount = vendorBills.reduce((sum, bill) => {
+        const copAmount = parseFloat(bill.copDetails?.amount || 0);
+        return sum + (isNaN(copAmount) ? 0 : copAmount);
+      }, 0);
+      return { 
+        vendorName, 
+        totalAmount: Number(totalAmount.toFixed(2)),
+        totalCopAmount: Number(totalCopAmount.toFixed(2)),
+        count: vendorBills.length
       };
     });
     
     // Prepare the final response
     const response = {
       report: {
-        title: "Invoices received at Mumbai",
+        title: "Invoices Received at Mumbai Report",
         generatedAt: new Date().toISOString(),
-        selectionCriteria: {
-          dateRange: startDate && endDate ? `from ${startDate} to ${endDate}` : "All dates",
-          region: region || "All regions"
+        filterCriteria: {
+          logic: "date of tax invoice received at Mumbai is filled and sent to accounts department is blank",
+          sorting: ["vendorName", "dateReceivedAtMumbai"]
         },
-        sortingCriteria: [
-          "Sr No (Column 1)"
-        ],
-        filterLogic: "Dt of tax invoice recd at mumbai should be filled AND Sent to accts dept should be blank",
         data: reportData,
         summary: {
-          totalCount: reportData.length,
-          totalAmount: Number(totalAmount.toFixed(2))
+          vendorSubtotals,
+          totalInvoiceAmount: Number(totalInvoiceAmount.toFixed(2)),
+          totalCopAmount: Number(totalCopAmount.toFixed(2)),
+          recordCount: totalCount
         }
       }
     };
@@ -508,7 +775,7 @@ export const getInvoicesReceivedAtMumbai = async (req, res) => {
 export const getInvoicesGivenToAcctsDept = async (req, res) => {
   try {
     // Parse query parameters for filtering
-    const { startDate, endDate, region } = req.query;
+    const { startDate, endDate, region, vendor } = req.query;
     
     // Build filter object based on actual bill schema
     const filter = {
@@ -531,12 +798,41 @@ export const getInvoicesGivenToAcctsDept = async (req, res) => {
       filter["region"] = region;
     }
     
+    // Add vendor filter if provided
+    if (vendor) {
+      filter["vendorName"] = vendor;
+    }
+    
     console.log("Filter being used:", JSON.stringify(filter, null, 2));
     
-    // Fetch bills from database, sort by sr no
-    const invoices = await Bill.find(filter).sort({ "srNo": 1 }).populate('vendor');
+    // Fetch invoices given to accounts department from database and populate vendor
+    const invoicesGivenToAcctsDept = await Bill.find(filter)
+      .sort({ "vendorName": 1, "accountsDept.dateGiven": 1 })
+      .populate('vendor');
     
-    console.log(`Found ${invoices.length} invoices given to accounts department`);
+    console.log(`Found ${invoicesGivenToAcctsDept.length} invoices given to accounts department`);
+    
+    // Group bills by vendor name
+    const vendorGroups = {};
+    
+    invoicesGivenToAcctsDept.forEach(bill => {
+      // Use vendor name from populated vendor object
+      const vendorName = bill.vendor?.vendorName || 'N/A';
+      if (!vendorGroups[vendorName]) {
+        vendorGroups[vendorName] = [];
+      }
+      vendorGroups[vendorName].push(bill);
+    });
+    
+    // Sort vendor names alphabetically
+    const sortedVendorNames = Object.keys(vendorGroups).sort();
+    
+    // Create the report data with grouped and sorted vendors
+    let index = 1;
+    let reportData = [];
+    let totalInvoiceAmount = 0;
+    let totalCopAmount = 0;
+    let totalCount = 0;
     
     // Format date strings properly
     const formatDate = (dateValue) => {
@@ -546,47 +842,102 @@ export const getInvoicesGivenToAcctsDept = async (req, res) => {
         `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
     };
     
-    // Process data for response
-    let totalInvoiceAmount = 0;
-    let totalCopAmount = 0;
-    const reportData = invoices.map((bill) => {
-      const taxInvAmt = parseFloat(bill.taxInvAmt || 0);
-      const copAmt = parseFloat(bill.copDetails?.amount || 0);
+    sortedVendorNames.forEach(vendorName => {
+      const vendorBills = vendorGroups[vendorName];
+      let vendorSubtotal = 0;
+      let vendorCopSubtotal = 0;
+      const billCount = vendorBills.length;
+      totalCount += billCount;
       
-      totalInvoiceAmount += !isNaN(taxInvAmt) ? taxInvAmt : 0;
-      totalCopAmount += !isNaN(copAmt) ? copAmt : 0;
+      // Sort bills within each vendor group by date given to accounts
+      vendorBills.sort((a, b) => {
+        if (a.accountsDept?.dateGiven && b.accountsDept?.dateGiven) {
+          return new Date(a.accountsDept.dateGiven) - new Date(b.accountsDept.dateGiven);
+        }
+        return 0;
+      });
       
-      return {
-        srNo: bill.srNo || "N/A",
-        projectDescription: bill.projectDescription || "N/A",
-        vendorName: bill.vendorName || "N/A",
-        taxInvNo: bill.taxInvNo || "N/A",
-        taxInvDate: formatDate(bill.taxInvDate) || "N/A",
-        taxInvAmt: !isNaN(taxInvAmt) ? Number(taxInvAmt.toFixed(2)) : 0,
-        dtGivenToAcctsDept: formatDate(bill.accountsDept?.dateGiven) || "N/A",
-        copAmt: !isNaN(copAmt) ? Number(copAmt.toFixed(2)) : 0,
-        poNo: bill.poNo || "N/A"
+      // Add each bill from this vendor to the report data
+      vendorBills.forEach(bill => {
+        const taxInvAmt = parseFloat(bill.taxInvAmt || 0);
+        const copAmt = parseFloat(bill.copDetails?.amount || 0);
+
+        vendorSubtotal += !isNaN(taxInvAmt) ? taxInvAmt : 0;
+        vendorCopSubtotal += !isNaN(copAmt) ? copAmt : 0;
+
+        totalInvoiceAmount += !isNaN(taxInvAmt) ? taxInvAmt : 0;
+        totalCopAmount += !isNaN(copAmt) ? copAmt : 0;
+        
+        reportData.push({
+          srNo: bill.srNo,
+          region: bill.region || "N/A",
+          vendorNo: bill.vendor?.vendorNo || "N/A",
+          vendorName: bill.vendor?.vendorName || "N/A",
+          taxInvNo: bill.taxInvNo || "N/A",
+          taxInvDate: formatDate(bill.taxInvDate) || "N/A",
+          taxInvAmt: !isNaN(taxInvAmt) ? Number(taxInvAmt.toFixed(2)) : 0,
+          copAmt: !isNaN(parseFloat(bill.copDetails?.amount)) ? 
+            Number(parseFloat(bill.copDetails.amount).toFixed(2)) : 0,
+          dtGivenToAcctsDept: formatDate(bill.accountsDept?.dateGiven) || "N/A",
+          poNo: bill.poNo || "N/A",
+          natureOfWorkSupply: bill.natureOfWork || "N/A"
+        });
+      });
+      
+      // Add subtotal row after each vendor's bills
+      reportData.push({
+        isSubtotal: true,
+        vendorName: vendorName,
+        subtotalLabel: `Subtotal for ${vendorName}:`,
+        subtotalAmount: Number(vendorSubtotal.toFixed(2)),
+        subtotalCopAmt: Number(vendorCopSubtotal.toFixed(2)),
+        count: billCount
+      });
+    });
+    
+    // Add grand total row
+    reportData.push({
+      isGrandTotal: true,
+      grandTotalLabel: "Grand Total:",
+      grandTotalAmount: Number(totalInvoiceAmount.toFixed(2)),
+      grandTotalCopAmt: Number(totalCopAmount.toFixed(2)),
+      totalCount: totalCount
+    });
+    
+    // Calculate vendor subtotals for summary section
+    const vendorSubtotals = sortedVendorNames.map(vendorName => {
+      const vendorBills = vendorGroups[vendorName];
+      const totalAmount = vendorBills.reduce((sum, bill) => {
+        const amount = parseFloat(bill.taxInvAmt || 0);
+        return sum + (isNaN(amount) ? 0 : amount);
+      }, 0);
+      const totalCopAmount = vendorBills.reduce((sum, bill) => {
+        const copAmount = parseFloat(bill.copDetails?.amount || 0);
+        return sum + (isNaN(copAmount) ? 0 : copAmount);
+      }, 0);
+      return { 
+        vendorName, 
+        totalAmount: Number(totalAmount.toFixed(2)),
+        totalCopAmount: Number(totalCopAmount.toFixed(2)),
+        count: vendorBills.length
       };
     });
     
     // Prepare the final response
     const response = {
       report: {
-        title: "Invoices given to Accts Dept",
+        title: "Invoices Given to Accounts Department Report",
         generatedAt: new Date().toISOString(),
-        selectionCriteria: {
-          dateRange: startDate && endDate ? `from ${startDate} to ${endDate}` : "All dates",
-          region: region || "All regions"
+        filterCriteria: {
+          logic: "date of tax invoice received at Mumbai is filled and sent to accounts department is filled",
+          sorting: ["vendorName", "dateGivenToAccounts"]
         },
-        sortingCriteria: [
-          "Sr No (Column 1)"
-        ],
-        filterLogic: "Dt of tax invoice recd at mumbai should be filled (Column 62) AND Sent to accts dept should be filled (Column 80)",
         data: reportData,
         summary: {
-          totalCount: reportData.length,
+          vendorSubtotals,
           totalInvoiceAmount: Number(totalInvoiceAmount.toFixed(2)),
-          totalCopAmount: Number(totalCopAmount.toFixed(2))
+          totalCopAmount: Number(totalCopAmount.toFixed(2)),
+          recordCount: totalCount
         }
       }
     };
@@ -595,8 +946,7 @@ export const getInvoicesGivenToAcctsDept = async (req, res) => {
   } catch (error) {
     console.error('Error generating invoices given to accounts department report:', error);
     return res.status(500).json({ 
-      success: false, 
-      message: 'Error generating report', 
+      success: false,      message: 'Error generating report', 
       error: error.message 
     });
   }
@@ -610,7 +960,7 @@ export const getInvoicesGivenToAcctsDept = async (req, res) => {
 export const getInvoicesGivenToQsSite = async (req, res) => {
   try {
     // Parse query parameters for filtering
-    const { startDate, endDate, region } = req.query;
+    const { startDate, endDate, region, vendor } = req.query;
     
     // Build filter object based on actual bill schema
     const filter = {
@@ -631,12 +981,41 @@ export const getInvoicesGivenToQsSite = async (req, res) => {
       filter["region"] = region;
     }
     
+    // Add vendor filter if provided
+    if (vendor) {
+      filter["vendorName"] = vendor;
+    }
+    
     console.log("Filter being used:", JSON.stringify(filter, null, 2));
     
-    // Fetch bills from database, sort by sr no
-    const invoices = await Bill.find(filter).sort({ "srNo": 1 }).populate('vendor');
+    // Fetch invoices given to QS site from database and populate vendor
+    const invoicesGivenToQsSite = await Bill.find(filter)
+      .sort({ "vendorName": 1, "qsSite.dateGiven": 1 })
+      .populate('vendor');
     
-    console.log(`Found ${invoices.length} invoices given to QS site`);
+    console.log(`Found ${invoicesGivenToQsSite.length} invoices given to QS site`);
+    
+    // Group bills by vendor name
+    const vendorGroups = {};
+    
+    invoicesGivenToQsSite.forEach(bill => {
+      // Use vendor name from populated vendor object
+      const vendorName = bill.vendor?.vendorName || 'N/A';
+      if (!vendorGroups[vendorName]) {
+        vendorGroups[vendorName] = [];
+      }
+      vendorGroups[vendorName].push(bill);
+    });
+    
+    // Sort vendor names alphabetically
+    const sortedVendorNames = Object.keys(vendorGroups).sort();
+    
+    // Create the report data with grouped and sorted vendors
+    let index = 1;
+    let reportData = [];
+    let totalInvoiceAmount = 0;
+    let totalCopAmount = 0;
+    let totalCount = 0;
     
     // Format date strings properly
     const formatDate = (dateValue) => {
@@ -646,44 +1025,101 @@ export const getInvoicesGivenToQsSite = async (req, res) => {
         `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
     };
     
-    // Process data for response
-    let totalInvoiceAmount = 0;
-    const reportData = invoices.map((bill) => {
-      const taxInvAmt = parseFloat(bill.taxInvAmt || 0);
-      const copAmt = parseFloat(bill.copDetails?.amount || 0);
+    sortedVendorNames.forEach(vendorName => {
+      const vendorBills = vendorGroups[vendorName];
+      let vendorSubtotal = 0;
+      let vendorCopSubtotal = 0;
+      const billCount = vendorBills.length;
+      totalCount += billCount;
       
-      totalInvoiceAmount += !isNaN(taxInvAmt) ? taxInvAmt : 0;
+      // Sort bills within each vendor group by date given to QS site
+      vendorBills.sort((a, b) => {
+        if (a.qsSite?.dateGiven && b.qsSite?.dateGiven) {
+          return new Date(a.qsSite.dateGiven) - new Date(b.qsSite.dateGiven);
+        }
+        return 0;
+      });
       
-      return {
-        srNo: bill.srNo || "N/A",
-        projectDescription: bill.projectDescription || "N/A",
-        vendorName: bill.vendorName || "N/A",
-        taxInvNo: bill.taxInvNo || "N/A",
-        taxInvDate: formatDate(bill.taxInvDate) || "N/A",
-        taxInvAmt: !isNaN(taxInvAmt) ? Number(taxInvAmt.toFixed(2)) : 0,
-        dtGivenToQsSite: formatDate(bill.qsSite?.dateGiven) || "N/A",
-        copAmt: !isNaN(copAmt) && copAmt > 0 ? Number(copAmt.toFixed(2)) : null,
-        poNo: bill.poNo || "N/A"
+      // Add each bill from this vendor to the report data
+      vendorBills.forEach(bill => {
+        const taxInvAmt = parseFloat(bill.taxInvAmt || 0);
+        const copAmt = parseFloat(bill.copDetails?.amount || 0);
+
+        vendorSubtotal += !isNaN(taxInvAmt) ? taxInvAmt : 0;
+        vendorCopSubtotal += !isNaN(copAmt) ? copAmt : 0;
+
+        totalInvoiceAmount += !isNaN(taxInvAmt) ? taxInvAmt : 0;
+        totalCopAmount += !isNaN(copAmt) ? copAmt : 0;
+        
+        reportData.push({
+          srNo: bill.srNo,
+          region: bill.region || "N/A",
+          vendorNo: bill.vendor?.vendorNo || "N/A",
+          vendorName: bill.vendor?.vendorName || "N/A",
+          taxInvNo: bill.taxInvNo || "N/A",
+          taxInvDate: formatDate(bill.taxInvDate) || "N/A",
+          taxInvAmt: !isNaN(taxInvAmt) ? Number(taxInvAmt.toFixed(2)) : 0,
+          copAmt: !isNaN(copAmt) && copAmt > 0 ? Number(copAmt.toFixed(2)) : null,
+          dtGivenToQsSite: formatDate(bill.qsSite?.dateGiven) || "N/A",
+          poNo: bill.poNo || "N/A",
+          natureOfWorkSupply: bill.natureOfWork || "N/A"
+        });
+      });
+      
+      // Add subtotal row after each vendor's bills
+      reportData.push({
+        isSubtotal: true,
+        vendorName: vendorName,
+        subtotalLabel: `Subtotal for ${vendorName}:`,
+        subtotalAmount: Number(vendorSubtotal.toFixed(2)),
+        subtotalCopAmt: Number(vendorCopSubtotal.toFixed(2)),
+        count: billCount
+      });
+    });
+    
+    // Add grand total row
+    reportData.push({
+      isGrandTotal: true,
+      grandTotalLabel: "Grand Total:",
+      grandTotalAmount: Number(totalInvoiceAmount.toFixed(2)),
+      grandTotalCopAmt: Number(totalCopAmount.toFixed(2)),
+      totalCount: totalCount
+    });
+    
+    // Calculate vendor subtotals for summary section
+    const vendorSubtotals = sortedVendorNames.map(vendorName => {
+      const vendorBills = vendorGroups[vendorName];
+      const totalAmount = vendorBills.reduce((sum, bill) => {
+        const amount = parseFloat(bill.taxInvAmt || 0);
+        return sum + (isNaN(amount) ? 0 : amount);
+      }, 0);
+      const totalCopAmount = vendorBills.reduce((sum, bill) => {
+        const copAmount = parseFloat(bill.copDetails?.amount || 0);
+        return sum + (isNaN(copAmount) ? 0 : copAmount);
+      }, 0);
+      return { 
+        vendorName, 
+        totalAmount: Number(totalAmount.toFixed(2)),
+        totalCopAmount: Number(totalCopAmount.toFixed(2)),
+        count: vendorBills.length
       };
     });
     
     // Prepare the final response
     const response = {
       report: {
-        title: "Invoices given to QS site",
+        title: "Invoices Given to QS Site Report",
         generatedAt: new Date().toISOString(),
-        selectionCriteria: {
-          dateRange: startDate && endDate ? `from ${startDate} to ${endDate}` : "All dates",
-          region: region || "All regions"
+        filterCriteria: {
+          logic: "date of invoice given to QS site is filled",
+          sorting: ["vendorName", "dateGivenToQsSite"]
         },
-        sortingCriteria: [
-          "Sr No (Column 1)"
-        ],
-        filterLogic: "Dt of Inv given to QS site should be filled (Column 35)",
         data: reportData,
         summary: {
-          totalCount: reportData.length,
-          totalInvoiceAmount: Number(totalInvoiceAmount.toFixed(2))
+          vendorSubtotals,
+          totalInvoiceAmount: Number(totalInvoiceAmount.toFixed(2)),
+          totalCopAmount: Number(totalCopAmount.toFixed(2)),
+          recordCount: totalCount
         }
       }
     };
