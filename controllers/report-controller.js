@@ -961,16 +961,15 @@ export const getInvoicesGivenToQsSite = async (req, res) => {
   try {
     // Parse query parameters for filtering
     const { startDate, endDate, region, vendor } = req.query;
-    
-    // Build filter object based on actual bill schema
+      // Build filter object based on actual bill schema
     const filter = {
       // Invoices given to QS site should be filled
-      "qsSite.dateGiven": { $ne: null, $exists: true }
+      "qsInspection.dateGiven": { $ne: null, $exists: true }
     };
     
     // Add date range filter if provided
     if (startDate && endDate) {
-      filter["qsSite.dateGiven"] = { 
+      filter["qsInspection.dateGiven"] = { 
         $gte: new Date(startDate), 
         $lte: endOfDay(endDate) 
       };
@@ -986,12 +985,11 @@ export const getInvoicesGivenToQsSite = async (req, res) => {
       filter["vendorName"] = vendor;
     }
     
-    console.log("Filter being used:", JSON.stringify(filter, null, 2));
-    
-    // Fetch invoices given to QS site from database and populate vendor
+    console.log("Filter being used:", JSON.stringify(filter, null, 2));    // Fetch invoices given to QS site from database and populate vendor
     const invoicesGivenToQsSite = await Bill.find(filter)
-      .sort({ "vendorName": 1, "qsSite.dateGiven": 1 })
-      .populate('vendor');
+      .sort({ "vendorName": 1, "qsInspection.dateGiven": 1 })
+      .populate('vendor')
+      .populate('natureOfWork');
     
     console.log(`Found ${invoicesGivenToQsSite.length} invoices given to QS site`);
     
@@ -1031,11 +1029,10 @@ export const getInvoicesGivenToQsSite = async (req, res) => {
       let vendorCopSubtotal = 0;
       const billCount = vendorBills.length;
       totalCount += billCount;
-      
-      // Sort bills within each vendor group by date given to QS site
+        // Sort bills within each vendor group by date given to QS site
       vendorBills.sort((a, b) => {
-        if (a.qsSite?.dateGiven && b.qsSite?.dateGiven) {
-          return new Date(a.qsSite.dateGiven) - new Date(b.qsSite.dateGiven);
+        if (a.qsInspection?.dateGiven && b.qsInspection?.dateGiven) {
+          return new Date(a.qsInspection.dateGiven) - new Date(b.qsInspection.dateGiven);
         }
         return 0;
       });
@@ -1060,9 +1057,9 @@ export const getInvoicesGivenToQsSite = async (req, res) => {
           taxInvDate: formatDate(bill.taxInvDate) || "N/A",
           taxInvAmt: !isNaN(taxInvAmt) ? Number(taxInvAmt.toFixed(2)) : 0,
           copAmt: !isNaN(copAmt) && copAmt > 0 ? Number(copAmt.toFixed(2)) : null,
-          dtGivenToQsSite: formatDate(bill.qsSite?.dateGiven) || "N/A",
+          dtGivenToQsSite: formatDate(bill.qsInspection?.dateGiven) || "N/A",
           poNo: bill.poNo || "N/A",
-          natureOfWorkSupply: bill.natureOfWork || "N/A"
+          natureOfWorkSupply: bill.natureOfWork?.natureOfWork || "N/A"
         });
       });
       
