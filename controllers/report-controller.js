@@ -109,8 +109,7 @@ export const getOutstandingBillsReport = async (req, res) => {
         vendorCopSubtotal += !isNaN(copAmt) ? copAmt : 0;
 
         totalInvoiceAmount += !isNaN(taxInvAmt) ? taxInvAmt : 0;
-        totalCopAmount += !isNaN(copAmt) ? copAmt : 0;
-          vendorGroup.bills.push({
+        totalCopAmount += !isNaN(copAmt) ? copAmt : 0;          vendorGroup.bills.push({
           srNo: bill.srNo,
           region: bill.region || "N/A",
           vendorNo: bill.vendor?.vendorNo || "N/A",
@@ -121,8 +120,8 @@ export const getOutstandingBillsReport = async (req, res) => {
           copAmt: !isNaN(parseFloat(bill.copDetails?.amount)) ? 
             Number(parseFloat(bill.copDetails.amount).toFixed(2)) : 0,
           dateRecdInAcctsDept: formatDate(bill.accountsDept?.dateReceived) || "N/A",
-          paymentInstructions: bill.accountsDept.paymentInstructions || "N/A",
-          remarksForPaymentInstructions: bill.accountsDept.remarksForPayInstructions || "N/A"
+          paymentInstructions: bill.accountsDept?.paymentInstructions || "N/A",
+          remarksForPaymentInstructions: bill.accountsDept?.remarksForPayInstructions || "N/A"
         });
       });
       
@@ -243,7 +242,8 @@ export const getInvoicesReceivedAtSite = async (req, res) => {
     // Fetch invoices received at site from database and populate vendor
     const invoicesReceivedAtSite = await Bill.find(filter)
       .sort({ "vendorName": 1, "taxInvRecdAtSite": 1 })
-      .populate('vendor');
+      .populate('vendor')
+      .populate('natureOfWork');
     
     console.log(`Found ${invoicesReceivedAtSite.length} invoices received at site`);
     
@@ -276,8 +276,7 @@ export const getInvoicesReceivedAtSite = async (req, res) => {
       return isNaN(date.getTime()) ? null : 
         `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
     };
-    
-    sortedVendorNames.forEach(vendorName => {
+      sortedVendorNames.forEach(vendorName => {
       const vendorBills = vendorGroups[vendorName];
       let vendorSubtotal = 0;
       let vendorCopSubtotal = 0;
@@ -315,7 +314,7 @@ export const getInvoicesReceivedAtSite = async (req, res) => {
             Number(parseFloat(bill.copDetails.amount).toFixed(2)) : 0,
           dtTaxInvRecdAtSite: formatDate(bill.taxInvRecdAtSite) || "N/A",
           poNo: bill.poNo || "N/A",
-          natureOfWorkSupply: bill.natureOfWork || "N/A"
+          natureOfWorkSupply: bill.natureOfWork.natureOfWork || "N/A"
         });
       });
       
@@ -329,8 +328,7 @@ export const getInvoicesReceivedAtSite = async (req, res) => {
         count: billCount
       });
     });
-    
-    // Add grand total row
+      // Add grand total row
     reportData.push({
       isGrandTotal: true,
       grandTotalLabel: "Grand Total:",
@@ -434,7 +432,8 @@ export const getInvoicesCourierToMumbai = async (req, res) => {
     // Fetch invoices couriered to Mumbai from database and populate vendor
     const invoicesCourierToMumbai = await Bill.find(filter)
       .sort({ "vendorName": 1, "siteOfficeDispatch.dateGiven": 1 })
-      .populate('vendor');
+      .populate('vendor')
+      .populate('natureOfWork');
     
     console.log(`Found ${invoicesCourierToMumbai.length} invoices couriered to Mumbai`);
     
@@ -507,7 +506,7 @@ export const getInvoicesCourierToMumbai = async (req, res) => {
           dtTaxInvRecdAtSite: formatDate(bill.taxInvRecdAtSite) || "N/A",
           dtTaxInvCourierToMumbai: formatDate(bill.siteOfficeDispatch?.dateGiven) || "N/A",
           poNo: bill.poNo || "N/A",
-          natureOfWorkSupply: bill.natureOfWork || "N/A"
+           natureOfWorkSupply: bill.natureOfWork.natureOfWork || "N/A"
         });
       });
       
@@ -621,7 +620,8 @@ export const getInvoicesReceivedAtMumbai = async (req, res) => {
     // Fetch invoices received at Mumbai from database and populate vendor
     const invoicesReceivedAtMumbai = await Bill.find(filter)
       .sort({ "vendorName": 1, "pimoMumbai.dateReceived": 1 })
-      .populate('vendor');
+      .populate('vendor')
+      .populate('natureOfWork');
     
     console.log(`Found ${invoicesReceivedAtMumbai.length} invoices received at Mumbai but not sent to accounts department`);
     
@@ -654,8 +654,7 @@ export const getInvoicesReceivedAtMumbai = async (req, res) => {
       return isNaN(date.getTime()) ? null : 
         `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
     };
-    
-    sortedVendorNames.forEach(vendorName => {
+      sortedVendorNames.forEach(vendorName => {
       const vendorBills = vendorGroups[vendorName];
       let vendorSubtotal = 0;
       let vendorCopSubtotal = 0;
@@ -694,7 +693,7 @@ export const getInvoicesReceivedAtMumbai = async (req, res) => {
           dtTaxInvRecdAtSite: formatDate(bill.taxInvRecdAtSite) || "N/A",
           dtTaxInvRecdAtMumbai: formatDate(bill.pimoMumbai?.dateReceived) || "N/A",
           poNo: bill.poNo || "N/A",
-          natureOfWorkSupply: bill.natureOfWork || "N/A"
+           natureOfWorkSupply: bill.natureOfWork.natureOfWork || "N/A"
         });
       });
       
@@ -808,7 +807,8 @@ export const getInvoicesGivenToAcctsDept = async (req, res) => {
     // Fetch invoices given to accounts department from database and populate vendor
     const invoicesGivenToAcctsDept = await Bill.find(filter)
       .sort({ "vendorName": 1, "accountsDept.dateGiven": 1 })
-      .populate('vendor');
+      .populate('vendor')
+      .populate('natureOfWork');;
     
     console.log(`Found ${invoicesGivenToAcctsDept.length} invoices given to accounts department`);
     
@@ -880,7 +880,7 @@ export const getInvoicesGivenToAcctsDept = async (req, res) => {
             Number(parseFloat(bill.copDetails.amount).toFixed(2)) : 0,
           dtGivenToAcctsDept: formatDate(bill.accountsDept?.dateGiven) || "N/A",
           poNo: bill.poNo || "N/A",
-          natureOfWorkSupply: bill.natureOfWork || "N/A"
+           natureOfWorkSupply: bill.natureOfWork.natureOfWork || "N/A"
         });
       });
       
@@ -1171,10 +1171,33 @@ export const getInvoicesPaid = async (req, res) => {
     
     console.log("Filter being used:", JSON.stringify(filter, null, 2));
     
-    // Fetch bills from database, sort by sr no
-    const invoices = await Bill.find(filter).sort({ "srNo": 1 }).populate('vendor');
+    // Fetch bills from database, sort by vendor name first, then by sr no
+    const invoices = await Bill.find(filter)
+      .sort({ "vendorName": 1, "srNo": 1 })
+      .populate('vendor');
     
     console.log(`Found ${invoices.length} invoices Paid`);
+    
+    // Group bills by vendor name
+    const vendorGroups = {};
+    
+    invoices.forEach(bill => {
+      // Use vendor name from populated vendor object
+      const vendorName = bill.vendor?.vendorName || 'N/A';
+      if (!vendorGroups[vendorName]) {
+        vendorGroups[vendorName] = [];
+      }
+      vendorGroups[vendorName].push(bill);
+    });
+    
+    // Sort vendor names alphabetically
+    const sortedVendorNames = Object.keys(vendorGroups).sort();
+    
+    // Create the report data with grouped and sorted vendors
+    let reportData = [];
+    let totalInvoiceAmount = 0;
+    let totalPaymentAmount = 0;
+    let totalCount = 0;
     
     // Format date strings properly
     const formatDate = (dateValue) => {
@@ -1184,28 +1207,82 @@ export const getInvoicesPaid = async (req, res) => {
         `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
     };
     
-    // Process data for response
-    let totalInvoiceAmount = 0;
-    let totalPaymentAmount = 0;
-    const reportData = invoices.map((bill) => {
-      const taxInvAmt = parseFloat(bill.taxInvAmt || 0);
-      const paymentAmt = parseFloat(bill.accountsDept?.paymentAmt || 0);
+    sortedVendorNames.forEach(vendorName => {
+      const vendorBills = vendorGroups[vendorName];
+      let vendorInvoiceSubtotal = 0;
+      let vendorPaymentSubtotal = 0;
+      const billCount = vendorBills.length;
+      totalCount += billCount;
       
-      totalInvoiceAmount += !isNaN(taxInvAmt) ? taxInvAmt : 0;
-      totalPaymentAmount += !isNaN(paymentAmt) ? paymentAmt : 0;
+      // Sort bills within each vendor group by sr no
+      vendorBills.sort((a, b) => {
+        const aSrNo = parseInt(a.srNo) || 0;
+        const bSrNo = parseInt(b.srNo) || 0;
+        return aSrNo - bSrNo;
+      });
       
-      return {
-        srNo: bill.srNo || "N/A",
-        projectDescription: bill.projectDescription || "N/A",
-        vendorName: bill.vendor?.vendorName || "N/A",
-        taxInvNo: bill.taxInvNo || "N/A",
-        taxInvDate: formatDate(bill.taxInvDate) || "N/A",
-        taxInvAmt: !isNaN(taxInvAmt) ? Number(taxInvAmt.toFixed(2)) : 0,
-        dtGivenToAcctsDept: formatDate(bill.accountsDept?.dateGiven) || "N/A",
-        dtRecdInAcctsDept: formatDate(bill.accountsDept?.dateReceived) || "N/A",
-        dtOfPayment: formatDate(bill.accountsDept?.paymentDate) || "N/A",
-        paymentAmt: !isNaN(paymentAmt) ? Number(paymentAmt.toFixed(2)) : 0,
-        poNo: bill.poNo || "N/A"
+      // Add each bill from this vendor to the report data
+      vendorBills.forEach(bill => {
+        const taxInvAmt = parseFloat(bill.taxInvAmt || 0);
+        const paymentAmt = parseFloat(bill.accountsDept?.paymentAmt || 0);
+
+        vendorInvoiceSubtotal += !isNaN(taxInvAmt) ? taxInvAmt : 0;
+        vendorPaymentSubtotal += !isNaN(paymentAmt) ? paymentAmt : 0;
+
+        totalInvoiceAmount += !isNaN(taxInvAmt) ? taxInvAmt : 0;
+        totalPaymentAmount += !isNaN(paymentAmt) ? paymentAmt : 0;
+        
+        reportData.push({
+          srNo: bill.srNo || "N/A",
+          projectDescription: bill.projectDescription || "N/A",
+          vendorName: bill.vendor?.vendorName || "N/A",
+          taxInvNo: bill.taxInvNo || "N/A",
+          taxInvDate: formatDate(bill.taxInvDate) || "N/A",
+          taxInvAmt: !isNaN(taxInvAmt) ? Number(taxInvAmt.toFixed(2)) : 0,
+          dtGivenToAcctsDept: formatDate(bill.accountsDept?.dateGiven) || "N/A",
+          dtRecdInAcctsDept: formatDate(bill.accountsDept?.dateReceived) || "N/A",
+          dtOfPayment: formatDate(bill.accountsDept?.paymentDate) || "N/A",
+          paymentAmt: !isNaN(paymentAmt) ? Number(paymentAmt.toFixed(2)) : 0,
+          poNo: bill.poNo || "N/A"
+        });
+      });
+      
+      // Add subtotal row after each vendor's bills
+      reportData.push({
+        isSubtotal: true,
+        vendorName: vendorName,
+        subtotalLabel: `Subtotal for ${vendorName}:`,
+        subtotalInvoiceAmount: Number(vendorInvoiceSubtotal.toFixed(2)),
+        subtotalPaymentAmount: Number(vendorPaymentSubtotal.toFixed(2)),
+        count: billCount
+      });
+    });
+    
+    // Add grand total row
+    reportData.push({
+      isGrandTotal: true,
+      grandTotalLabel: "Grand Total:",
+      grandTotalInvoiceAmount: Number(totalInvoiceAmount.toFixed(2)),
+      grandTotalPaymentAmount: Number(totalPaymentAmount.toFixed(2)),
+      totalCount: totalCount
+    });
+    
+    // Calculate vendor subtotals for summary section
+    const vendorSubtotals = sortedVendorNames.map(vendorName => {
+      const vendorBills = vendorGroups[vendorName];
+      const totalInvoiceAmt = vendorBills.reduce((sum, bill) => {
+        const amount = parseFloat(bill.taxInvAmt || 0);
+        return sum + (isNaN(amount) ? 0 : amount);
+      }, 0);
+      const totalPaymentAmt = vendorBills.reduce((sum, bill) => {
+        const amount = parseFloat(bill.accountsDept?.paymentAmt || 0);
+        return sum + (isNaN(amount) ? 0 : amount);
+      }, 0);
+      return { 
+        vendorName, 
+        totalInvoiceAmount: Number(totalInvoiceAmt.toFixed(2)),
+        totalPaymentAmount: Number(totalPaymentAmt.toFixed(2)),
+        count: vendorBills.length
       };
     });
     
@@ -1220,12 +1297,14 @@ export const getInvoicesPaid = async (req, res) => {
           poIdentification: poIdentification || "All PO identifications"
         },
         sortingCriteria: [
+          "Vendor Name",
           "Sr No (Column 1)"
         ],
         filterLogic: "Dt of payment should be filled (Column 89)",
         data: reportData,
         summary: {
-          totalCount: reportData.length,
+          vendorSubtotals,
+          totalCount: totalCount,
           totalInvoiceAmount: Number(totalInvoiceAmount.toFixed(2)),
           totalPaymentAmount: Number(totalPaymentAmount.toFixed(2))
         }
@@ -1277,10 +1356,32 @@ export const getPendingBillsReport = async (req, res) => {
     
     console.log("Filter being used:", JSON.stringify(filter, null, 2));
     
-    // Fetch bills from database, sort by sr no
-    const pendingBills = await Bill.find(filter).sort({ "srNo": 1 }).populate('vendor');
+    // Fetch bills from database, sort by vendor name first, then by sr no
+    const pendingBills = await Bill.find(filter)
+      .sort({ "vendorName": 1, "srNo": 1 })
+      .populate('vendor');
     
     console.log(`Found ${pendingBills.length} pending bills`);
+    
+    // Group bills by vendor name
+    const vendorGroups = {};
+    
+    pendingBills.forEach(bill => {
+      // Use vendor name from populated vendor object
+      const vendorName = bill.vendor?.vendorName || 'N/A';
+      if (!vendorGroups[vendorName]) {
+        vendorGroups[vendorName] = [];
+      }
+      vendorGroups[vendorName].push(bill);
+    });
+    
+    // Sort vendor names alphabetically
+    const sortedVendorNames = Object.keys(vendorGroups).sort();
+    
+    // Create the report data with grouped and sorted vendors
+    let reportData = [];
+    let totalInvoiceAmount = 0;
+    let totalCount = 0;
     
     // Format date strings properly
     const formatDate = (dateValue) => {
@@ -1290,22 +1391,67 @@ export const getPendingBillsReport = async (req, res) => {
         `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
     };
     
-    // Process data for response
-    let totalInvoiceAmount = 0;
-    const reportData = pendingBills.map((bill) => {
-      const invoiceAmount = parseFloat(bill.taxInvAmt || 0);
-      totalInvoiceAmount += !isNaN(invoiceAmount) ? invoiceAmount : 0;
+    sortedVendorNames.forEach(vendorName => {
+      const vendorBills = vendorGroups[vendorName];
+      let vendorSubtotal = 0;
+      const billCount = vendorBills.length;
+      totalCount += billCount;
       
-      return {
-        srNo: bill.srNo || "N/A",
-        projectDescription: bill.projectDescription || "N/A",
-        vendorName: bill.vendor?.vendorName || "N/A",
-        invoiceNo: bill.taxInvNo || "N/A",
-        invoiceDate: formatDate(bill.taxInvDate) || "N/A",
-        invoiceAmount: !isNaN(invoiceAmount) ? Number(invoiceAmount.toFixed(2)) : 0,
-        dateInvoiceReceivedAtSite: formatDate(bill.taxInvRecdAtSite) || "N/A",
-        dateBillReceivedAtPimoRrrm: formatDate(bill.pimoMumbai?.dateReceived) || "N/A",
-        poNo: bill.poNo || "N/A"
+      // Sort bills within each vendor group by sr no
+      vendorBills.sort((a, b) => {
+        const aSrNo = parseInt(a.srNo) || 0;
+        const bSrNo = parseInt(b.srNo) || 0;
+        return aSrNo - bSrNo;
+      });
+      
+      // Add each bill from this vendor to the report data
+      vendorBills.forEach(bill => {
+        const invoiceAmount = parseFloat(bill.taxInvAmt || 0);
+        vendorSubtotal += !isNaN(invoiceAmount) ? invoiceAmount : 0;
+        totalInvoiceAmount += !isNaN(invoiceAmount) ? invoiceAmount : 0;
+        
+        reportData.push({
+          srNo: bill.srNo || "N/A",
+          projectDescription: bill.projectDescription || "N/A",
+          vendorName: bill.vendor?.vendorName || "N/A",
+          invoiceNo: bill.taxInvNo || "N/A",
+          invoiceDate: formatDate(bill.taxInvDate) || "N/A",
+          invoiceAmount: !isNaN(invoiceAmount) ? Number(invoiceAmount.toFixed(2)) : 0,
+          dateInvoiceReceivedAtSite: formatDate(bill.taxInvRecdAtSite) || "N/A",
+          dateBillReceivedAtPimoRrrm: formatDate(bill.pimoMumbai?.dateReceived) || "N/A",
+          poNo: bill.poNo || "N/A"
+        });
+      });
+      
+      // Add subtotal row after each vendor's bills
+      reportData.push({
+        isSubtotal: true,
+        vendorName: vendorName,
+        subtotalLabel: `Subtotal for ${vendorName}:`,
+        subtotalAmount: Number(vendorSubtotal.toFixed(2)),
+        count: billCount
+      });
+    });
+    
+    // Add grand total row
+    reportData.push({
+      isGrandTotal: true,
+      grandTotalLabel: "Grand Total:",
+      grandTotalAmount: Number(totalInvoiceAmount.toFixed(2)),
+      totalCount: totalCount
+    });
+    
+    // Calculate vendor subtotals for summary section
+    const vendorSubtotals = sortedVendorNames.map(vendorName => {
+      const vendorBills = vendorGroups[vendorName];
+      const totalAmount = vendorBills.reduce((sum, bill) => {
+        const amount = parseFloat(bill.taxInvAmt || 0);
+        return sum + (isNaN(amount) ? 0 : amount);
+      }, 0);
+      return { 
+        vendorName, 
+        totalAmount: Number(totalAmount.toFixed(2)),
+        count: vendorBills.length
       };
     });
     
@@ -1314,9 +1460,14 @@ export const getPendingBillsReport = async (req, res) => {
       report: {
         title: "Reports of pending bills with PIMO/SVKM site office/QS Mumbai office/QS site office",
         generatedAt: new Date().toISOString(),
+        filterCriteria: {
+          logic: "invoice received at site but not yet completed/paid",
+          sorting: ["vendorName", "srNo"]
+        },
         data: reportData,
         summary: {
-          totalCount: reportData.length,
+          vendorSubtotals,
+          totalCount: totalCount,
           totalInvoiceAmount: Number(totalInvoiceAmount.toFixed(2))
         }
       }

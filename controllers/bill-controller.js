@@ -460,48 +460,26 @@ const updateBill = async (req, res) => {
           ...existingBill.workflowState.history,
           ...req.body.workflowState.history,
         ];
-      }    }
-
-    // Validate only the fields being updated
-    if (req.body.vendorNo !== undefined) {
-      if (!req.body.vendorNo) {
-        return res.status(400).json({ message: "Vendor number cannot be empty" });
       }
     }
-    
-    if (req.body.amount !== undefined) {
-      const numAmount = parseFloat(req.body.amount);
-      if (isNaN(numAmount) || numAmount < 0) {
-        return res.status(400).json({ message: "Amount must be a valid positive number" });
-      }    }    // Check for uniqueness only if critical fields are being updated
-    const criticalFields = ['vendorNo', 'taxInvNo', 'taxInvDate', 'region'];
-    const updatingCriticalFields = criticalFields.some(field => req.body[field] !== undefined);
-      if (updatingCriticalFields) {
-      const uniqueQuery = {
-        vendorNo: req.body.vendorNo !== undefined ? req.body.vendorNo : existingBill.vendorNo,
-        taxInvNo: req.body.taxInvNo !== undefined ? req.body.taxInvNo : existingBill.taxInvNo,
-        taxInvDate: req.body.taxInvDate !== undefined ? req.body.taxInvDate : existingBill.taxInvDate,
-        region: req.body.region !== undefined ? req.body.region : existingBill.region,
-        _id: { $ne: existingBill._id }
-      };
-      
-      const duplicate = await Bill.findOne(uniqueQuery);
-      if (duplicate) {
-        return res.status(400).json({
-          success: false,
-          message: "A bill with the same vendorNo, taxInvNo, taxInvDate, and region already exists."
-        });      }
-    }
 
-    // Update the bill using standard fields
-    const bill = await Bill.findByIdAndUpdate(
-      req.params.id, 
-      { $set: updatedData }, 
-      {
-        new: true,
-        runValidators: false, // Skip validation for update to allow partial updates
-      }
+    // Validate vendorNo and amount
+    const check = validateVendorNoAndAmount(
+      req.body.vendorNo !== undefined ? req.body.vendorNo : existingBill.vendorNo,
+      req.body.amount !== undefined ? req.body.amount : existingBill.amount
     );
+    if (!check.valid) {
+      return res.status(400).json({ message: check.message });
+    }
+
+    // Set import mode to avoid validation errors for non-required fields
+    existingBill.setImportMode(true);
+
+    // Update the bill with the merged data
+    const bill = await Bill.findByIdAndUpdate(req.params.id, updatedData, {
+      new: true,
+      runValidators: true,
+    });
 
     res.status(200).json(bill);
   } catch (error) {
@@ -545,100 +523,16 @@ const patchBill = async (req, res) => {
         success: false,
         message: "Bill not found",
       });
-    }    // Static field mapping - automatically maps flat fields to nested locations
-    const nestedFieldMap = new Map([
-      // Accounts Department fields
-      ['paymentInstructions', 'accountsDept.paymentInstructions'],
-      ['remarksForPayInstructions', 'accountsDept.remarksForPayInstructions'],
-      ['paymentDate', 'accountsDept.paymentDate'],
-      ['paymentAmt', 'accountsDept.paymentAmt'],
-      ['f110Identification', 'accountsDept.f110Identification'],
-      ['remarksAcctsDept', 'accountsDept.remarksAcctsDept'],
-      ['accountsIdentification', 'accountsDept.accountsIdentification'],
-      ['hardCopy', 'accountsDept.hardCopy'],
-      ['invBookingChecking', 'accountsDept.invBookingChecking'],
-      ['status', 'accountsDept.status'],
-      
-      // PIMO Mumbai fields
-      ['receivedBy', 'pimoMumbai.receivedBy'],
-      ['namePIMO', 'pimoMumbai.namePIMO'],
-      ['namePIMO2', 'pimoMumbai.namePIMO2'],
-      ['remarksPimoMumbai', 'approvalDetails.remarksPimoMumbai'],
-      
-      // Site Office fields
-      ['siteOfficeName', 'siteOfficeDispatch.name'],
-      ['siteOfficeDate', 'siteOfficeDispatch.dateGiven'],
-      
-      // QS Mumbai fields
-      ['qsMumbaiName', 'qsMumbai.name'],
-      ['qsMumbaiDate', 'qsMumbai.dateGiven'],
-      
-      // COP Details
-      ['copAmount', 'copDetails.amount'],
-      ['copDate', 'copDetails.date'],
-      
-      // SES Details
-      ['sesNo', 'sesDetails.no'],
-      ['sesAmount', 'sesDetails.amount'],
-      ['sesDate', 'sesDetails.date'],
-      ['sesDoneBy', 'sesDetails.doneBy']
-    ]);
-
-    // Apply static field mapping and create update object using dot notation
-    const updateObject = {};
-    
-    for (const [key, value] of Object.entries(req.body)) {
-      if (nestedFieldMap.has(key)) {
-        // Map to nested field using dot notation
-        updateObject[nestedFieldMap.get(key)] = value;
-      } else if (!["_id", "createdAt", "updatedAt", "__v"].includes(key)) {
-        // Keep as is for root level fields, excluding system fields
-        updateObject[key] = value;
-      }
     }
-
-    // Handle special fields that need transformation
-    if (updateObject.natureOfWork) {
-      let natureOfWorkDoc = null;
-      if (typeof updateObject.natureOfWork === "string") {
-        natureOfWorkDoc = await NatureOfWorkMaster.findOne({
-          natureOfWork: updateObject.natureOfWork,
-        });
-      } else if (
-        typeof updateObject.natureOfWork === "object" &&
-        updateObject.natureOfWork._id
-      ) {
-        natureOfWorkDoc = await NatureOfWorkMaster.findById(
-          updateObject.natureOfWork._id
-        );
-      }
-      updateObject.natureOfWork = natureOfWorkDoc ? natureOfWorkDoc._id : null;
-    }
-
-    if (updateObject.currency) {
-      let currencyDoc = null;
-      if (typeof updateObject.currency === "string") {
-        currencyDoc = await CurrencyMaster.findOne({
-          currency: updateObject.currency,
-        });
-      } else if (
-        typeof updateObject.currency === "object" &&
-        updateObject.currency._id
-      ) {
-        currencyDoc = await CurrencyMaster.findById(updateObject.currency._id);
-      }      updateObject.currency = currencyDoc ? currencyDoc._id : null;
-    }
-
-    // Skip srNo if regenerating due to financial year change
- 
 
     // Process QS-related fields and organize them properly
-    organizeQSFields(updateObject);
+    organizeQSFields(req.body);
 
     // Check if bill date is being changed, which may require regenerating the srNo
-    if (updateObject.billDate && existingBill.billDate) {
+    let regenerateSerialNumber = false;
+    if (req.body.billDate && existingBill.billDate) {
       const oldDate = new Date(existingBill.billDate);
-      const newDate = new Date(updateObject.billDate);
+      const newDate = new Date(req.body.billDate);
 
       // Get financial year prefixes for old and new dates
       const oldPrefix = getFinancialYearPrefix(oldDate);
@@ -655,49 +549,151 @@ const patchBill = async (req, res) => {
 
         // Store old serial number in srNoOld
         existingBill.srNoOld = existingBill.srNo;
-        // Remove srNo from update object since it will be regenerated
-        delete updateObject.srNo;
       }
     }
 
-    // Validate only the fields being updated
-    if (updateObject.vendorNo !== undefined) {
-      if (!updateObject.vendorNo) {
-        return res.status(400).json({ message: "Vendor number cannot be empty" });
-      }
-    }
-    
-    if (updateObject.amount !== undefined) {
-      const numAmount = parseFloat(updateObject.amount);
-      if (isNaN(numAmount) || numAmount < 0) {
-        return res.status(400).json({ message: "Amount must be a valid positive number" });
+    // Create an object to hold the updates, only including fields that are in the request
+    const updates = {};
+
+    // Get all fields from the bill schema
+    const schemaFields = Object.keys(Bill.schema.paths);
+
+    // Track fields that we've processed to avoid duplicates
+    const processedFields = new Set();
+
+    // Process top-level fields
+    for (const field of Object.keys(req.body)) {
+      // Skip fields we'll handle specially
+      if (processedFields.has(field)) continue;
+      if (["_id", "createdAt", "updatedAt", "__v"].includes(field)) continue;
+      if (field === "srNo" && regenerateSerialNumber) continue;
+      if (schemaFields.includes(field)) {
+        let newValue = req.body[field];
+        if (field === "natureOfWork" && req.body.natureOfWork) {
+          let natureOfWorkDoc = null;
+          if (typeof req.body.natureOfWork === "string") {
+            natureOfWorkDoc = await NatureOfWorkMaster.findOne({
+              natureOfWork: req.body.natureOfWork,
+            });
+          } else if (
+            typeof req.body.natureOfWork === "object" &&
+            req.body.natureOfWork._id
+          ) {
+            natureOfWorkDoc = await NatureOfWorkMaster.findById(
+              req.body.natureOfWork._id
+            );
+          }
+          newValue = natureOfWorkDoc ? natureOfWorkDoc._id : null;
+        }
+        if (field === "currency" && req.body.currency) {
+          let currencyDoc = null;
+          if (typeof req.body.currency === "string") {
+            currencyDoc = await CurrencyMaster.findOne({
+              currency: req.body.currency,
+            });
+          } else if (
+            typeof req.body.currency === "object" &&
+            req.body.currency._id
+          ) {
+            currencyDoc = await CurrencyMaster.findById(req.body.currency._id);
+          }
+          newValue = currencyDoc ? currencyDoc._id : null;
+        }
+        const currentValue = existingBill[field];
+        if (
+          currentValue === null ||
+          currentValue === undefined ||
+          newValue !== null
+        ) {
+          updates[field] = newValue;
+        }
+        processedFields.add(field);
       }
     }
 
-    // Check for uniqueness only if critical fields are being updated
-    const criticalFields = ['vendorNo', 'taxInvNo', 'taxInvDate', 'region'];
-    const updatingCriticalFields = criticalFields.some(field => updateObject[field] !== undefined);
-    
-    if (updatingCriticalFields) {
-      const uniqueQuery = {
-        vendorNo: updateObject.vendorNo !== undefined ? updateObject.vendorNo : existingBill.vendorNo,
-        taxInvNo: updateObject.taxInvNo !== undefined ? updateObject.taxInvNo : existingBill.taxInvNo,
-        taxInvDate: updateObject.taxInvDate !== undefined ? updateObject.taxInvDate : existingBill.taxInvDate,
-        region: updateObject.region !== undefined ? updateObject.region : existingBill.region,
-        _id: { $ne: existingBill._id }
-      };
-      
-      const duplicate = await Bill.findOne(uniqueQuery);
-      if (duplicate) {
-        return res.status(400).json({
-          success: false,
-          message: "A bill with the same vendorNo, taxInvNo, taxInvDate, and region already exists."
-        });
+    // Handle nested objects
+    schemaFields.forEach((path) => {
+      const pathParts = path.split(".");
+      if (pathParts.length > 1) {
+        const topLevel = pathParts[0];
+
+        // If the top-level field is in the request body and is an object
+        if (req.body[topLevel] && typeof req.body[topLevel] === "object") {
+          // Initialize the object in updates if not already there
+          if (!updates[topLevel]) {
+            updates[topLevel] = {};
+          }
+
+          // Get the nested field
+          const nestedField = pathParts.slice(1).join(".");
+          const nestedValue = req.body[topLevel][nestedField];
+
+          // If the nested field exists in the request
+          if (nestedValue !== undefined) {
+            // Get the current value
+            let currentNestedValue;
+            try {
+              currentNestedValue = existingBill.get(path);
+            } catch (e) {
+              currentNestedValue = null;
+            }
+
+            // Only update if current is null or new is not null
+            if (
+              currentNestedValue === null ||
+              currentNestedValue === undefined ||
+              nestedValue !== null
+            ) {
+              // Set the nested field
+              const lastPart = pathParts[pathParts.length - 1];
+              let currentObj = updates[topLevel];
+
+              for (let i = 1; i < pathParts.length - 1; i++) {
+                if (!currentObj[pathParts[i]]) {
+                  currentObj[pathParts[i]] = {};
+                }
+                currentObj = currentObj[pathParts[i]];
+              }
+
+              currentObj[lastPart] = nestedValue;
+            }
+          }
+
+          processedFields.add(topLevel);
+        }
       }
+    });
+
+    // Validate vendorNo and amount
+    const check = validateVendorNoAndAmount(
+      req.body.vendorNo !== undefined ? req.body.vendorNo : existingBill.vendorNo,
+      req.body.amount !== undefined ? req.body.amount : existingBill.amount
+    );
+    if (!check.valid) {
+      return res.status(400).json({ message: check.message });
+    }
+
+    // Set import mode to avoid validation errors
+    existingBill.setImportMode(true);
+
+    // Uniqueness check for vendorNo, taxInvNo, taxInvDate, region (ignore self)
+    const uniqueQuery = {
+      vendorNo: req.body.vendorNo !== undefined ? req.body.vendorNo : existingBill.vendorNo,
+      taxInvNo: req.body.taxInvNo !== undefined ? req.body.taxInvNo : existingBill.taxInvNo,
+      taxInvDate: req.body.taxInvDate !== undefined ? req.body.taxInvDate : existingBill.taxInvDate,
+      region: req.body.region !== undefined ? req.body.region : existingBill.region,
+      _id: { $ne: existingBill._id }
+    };
+    const duplicate = await Bill.findOne(uniqueQuery);
+    if (duplicate) {
+      return res.status(400).json({
+        success: false,
+        message: "A bill with the same vendorNo, taxInvNo, taxInvDate, and region already exists."
+      });
     }
 
     // Only update the bill if there are changes
-    if (Object.keys(updateObject).length === 0) {
+    if (Object.keys(updates).length === 0) {
       return res.status(200).json({
         success: true,
         message: "No changes to apply",
@@ -705,12 +701,12 @@ const patchBill = async (req, res) => {
       });
     }
 
-    console.log("Applying updates:", updateObject);
+    console.log("Applying updates:", updates);
 
-    // Apply the updates using dot notation to preserve nested objects
+    // Apply the updates
     const updatedBill = await Bill.findByIdAndUpdate(
       existingBill._id,
-      { $set: updateObject },
+      { $set: updates },
       { new: true, runValidators: false }
     );
 
@@ -727,27 +723,6 @@ const patchBill = async (req, res) => {
       error: error.message,
     });
   }
-};
-
-// Validation function for vendor number and amount
-const validateVendorNoAndAmount = (vendorNo, amount) => {
-  // Check if vendorNo is provided and valid
-  if (!vendorNo) {
-    return { valid: false, message: "Vendor number is required" };
-  }
-  
-  // Check if amount is provided and valid
-  if (amount === undefined || amount === null) {
-    return { valid: false, message: "Amount is required" };
-  }
-  
-  // Check if amount is a valid number and positive
-  const numAmount = parseFloat(amount);
-  if (isNaN(numAmount) || numAmount < 0) {
-    return { valid: false, message: "Amount must be a valid positive number" };
-  }
-  
-  return { valid: true };
 };
 
 // Helper function to handle QS-related fields and organize them properly
