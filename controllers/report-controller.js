@@ -495,6 +495,7 @@ export const getInvoicesCourierToMumbai = async (req, res) => {
         
         reportData.push({
           srNo: bill.srNo,
+          projectDescription: bill.projectDescription || "N/A",
           region: bill.region || "N/A",
           vendorNo: bill.vendor?.vendorNo || "N/A",
           vendorName: bill.vendor?.vendorName || "N/A",
