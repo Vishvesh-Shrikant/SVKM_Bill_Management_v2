@@ -111,6 +111,7 @@ export const getOutstandingBillsReport = async (req, res) => {
         totalInvoiceAmount += !isNaN(taxInvAmt) ? taxInvAmt : 0;
         totalCopAmount += !isNaN(copAmt) ? copAmt : 0;          vendorGroup.bills.push({
           srNo: bill.srNo,
+          projectDescription: bill.projectDescription || "N/A",
           region: bill.region || "N/A",
           vendorNo: bill.vendor?.vendorNo || "N/A",
           vendorName: bill.vendor?.vendorName || "N/A",
@@ -304,6 +305,7 @@ export const getInvoicesReceivedAtSite = async (req, res) => {
         
         reportData.push({
           srNo: bill.srNo,
+          projectDescription: bill.projectDescription || "N/A",
           region: bill.region || "N/A",
           vendorNo: bill.vendor?.vendorNo || "N/A",
           vendorName: bill.vendor?.vendorName || "N/A",
@@ -683,6 +685,7 @@ export const getInvoicesReceivedAtMumbai = async (req, res) => {
         
         reportData.push({
           srNo: bill.srNo,
+          projectDescription: bill.projectDescription || "N/A",
           region: bill.region || "N/A",
           vendorNo: bill.vendor?.vendorNo || "N/A",
           vendorName: bill.vendor?.vendorName || "N/A",
@@ -871,6 +874,7 @@ export const getInvoicesGivenToAcctsDept = async (req, res) => {
         
         reportData.push({
           srNo: bill.srNo,
+          projectDescription: bill.projectDescription || "N/A",
           region: bill.region || "N/A",
           vendorNo: bill.vendor?.vendorNo || "N/A",
           vendorName: bill.vendor?.vendorName || "N/A",
@@ -1051,6 +1055,7 @@ export const getInvoicesGivenToQsSite = async (req, res) => {
         
         reportData.push({
           srNo: bill.srNo,
+          projectDescription: bill.projectDescription || "N/A",
           region: bill.region || "N/A",
           vendorNo: bill.vendor?.vendorNo || "N/A",
           vendorName: bill.vendor?.vendorName || "N/A",
