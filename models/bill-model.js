@@ -218,6 +218,7 @@ const billSchema = new mongoose.Schema(
             namePIMO2: { type: String },
             dateReceivedFromIT: { type: Date },
             dateReceivedFromPIMO: { type: Date },
+            dateReturnedFromQs: { type: Date },
         },
         qsMumbai: {
             name: { type: String },
@@ -233,6 +234,7 @@ const billSchema = new mongoose.Schema(
             amount: { type: Number },
             date: { type: Date },
             doneBy: { type: String },
+            name: { type: String },
         },
         approvalDetails: {
             directorApproval: {
