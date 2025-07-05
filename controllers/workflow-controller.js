@@ -89,11 +89,9 @@ export const changeBatchWorkflowState = async (req, res) => {
     const { id: fromId, name: fromName, role: fromRoles } = fromUser;
     const { id: toId, name: toName, role: toRoles } = toUser;
 
-    // Convert roles to arrays if they aren't already
     const fromRoleArray = Array.isArray(fromRoles) ? fromRoles : [fromRoles];
     const toRoleArray = Array.isArray(toRoles) ? toRoles : [toRoles];
 
-    // Validate request body
     if (
       !fromUser ||
       !toUser ||
@@ -161,7 +159,6 @@ export const changeBatchWorkflowState = async (req, res) => {
           duration: lastWorkflow ? new Date() - lastWorkflow.createdAt : 0,
         });
 
-        // Populate user references
         newWorkflow = await newWorkflow.populate([
           { path: "fromUser.id", select: "name role department" },
           { path: "toUser.id", select: "name role department" },
@@ -183,9 +180,13 @@ export const changeBatchWorkflowState = async (req, res) => {
             toRoleArray.includes("site_engineer") ||
             toRoleArray.includes("migo_entry"))
         ) {
-          let setObj = { maxCount: 1, currentCount: 1 };
+          let setObj = {
+            maxCount: 1,
+            currentCount: 1,
+          };
+
           if (toRoleArray.includes("quality_engineer")) {
-            if (billFound.natureOfWork == "Service") {
+            if (billFound.natureOfWork?.natureOfWork == "Service") {
               results.failed.push({
                 billId,
                 message:
@@ -224,7 +225,7 @@ export const changeBatchWorkflowState = async (req, res) => {
             setObj["siteEngineer.dateGiven"] = now;
             setObj["siteEngineer.name"] = toName;
           } else if (toRoleArray.includes("site_architect")) {
-            if (billFound.natureOfWork == "Material") {
+            if (billFound.natureOfWork?.natureOfWork == "Material") {
               results.failed.push({
                 billId,
                 message: "Material bills cannot be forwarded to Site Architect",
@@ -238,20 +239,11 @@ export const changeBatchWorkflowState = async (req, res) => {
               setObj["architect.name"] = toName;
             }
           } else if (toRoleArray.includes("site_incharge")) {
-            // if(
-            //   billFound.qsMeasurementCheck.dateGiven &&
-            //     billFound.qsInspection.dateGiven &&
-            //     billFound.qsCOP.dateGiven &&
-            //     billFound.siteEngineer.dateGiven &&
-            //     billFound.architect.dateGiven
-            // )
-            // {
             console.log(
               `Forwarding bill ${billId} to Site Incharge from Site Officer`
             );
             setObj["siteIncharge.dateGiven"] = now;
             setObj["siteIncharge.name"] = toName;
-            // }
           } else if (toRoleArray.includes("site_dispatch_team")) {
             console.log(
               `Forwarding bill ${billId} to Site Dispatch Team from Site Officer`
@@ -259,6 +251,7 @@ export const changeBatchWorkflowState = async (req, res) => {
             setObj["siteOfficeDispatch.name"] = toName;
             setObj["siteOfficeDispatch.dateGiven"] = now;
           }
+
           billWorkflow = await Bill.findByIdAndUpdate(
             billId,
             { $set: setObj },
@@ -266,7 +259,7 @@ export const changeBatchWorkflowState = async (req, res) => {
           );
         }
 
-        // Site Officer to PIMO Mumbai
+        //site officer to pimo mumbai
         else if (
           fromRoleArray.includes("site_team") &&
           toRoleArray.includes("pimo_mumbai") &&
@@ -288,6 +281,7 @@ export const changeBatchWorkflowState = async (req, res) => {
             { new: true }
           );
         }
+
         // PIMO Mumbai to QS Mumbai
         else if (
           fromRoleArray.includes("pimo_mumbai") &&
@@ -303,12 +297,10 @@ export const changeBatchWorkflowState = async (req, res) => {
               $set: {
                 currentCount: 3,
                 maxCount: Math.max(billFound.maxCount, 3),
-                // "qsMumbai.dateGiven": now,
-                // "qsMumbai.name": toName,
-                // // Also update workflowState
-                // "workflowState.currentState": "QS_Mumbai",
-                // "workflowState.lastUpdated": now,
+                "qsMumbai.dateGiven": now,
+                "qsMumbai.name": toName,
               },
+              //   remove $ push
               $push: {
                 "workflowState.history": {
                   state: "QS_Mumbai",
@@ -319,9 +311,12 @@ export const changeBatchWorkflowState = async (req, res) => {
                 },
               },
             },
-            { new: true }
+            {
+              new: true,
+            }
           );
         }
+
         // QS Mumbai to PIMO Mumbai
         else if (
           fromRoleArray.includes("qs_mumbai") &&
@@ -337,34 +332,23 @@ export const changeBatchWorkflowState = async (req, res) => {
               $set: {
                 currentCount: 4,
                 maxCount: Math.max(billFound.maxCount, 4),
-                "pimoMumbai.dateGiven": now,
+                "pimoMumbai.dateReturnedFromQs": now,
                 "pimoMumbai.receivedBy": toName,
-                "workflowState.currentState": "PIMO_Mumbai",
-                "workflowState.lastUpdated": now,
-              },
-              $push: {
-                "workflowState.history": {
-                  state: "PIMO_Mumbai",
-                  timestamp: now,
-                  actor: toName,
-                  comments: remarks,
-                  action: "forward",
-                },
               },
             },
-            { new: true }
+            {
+              new: true,
+            }
           );
         }
 
         // PIMO Mumbai to Trustees
         else if (
           fromRoleArray.includes("pimo_mumbai") &&
-          toRoleArray.includes(
-            "trustees" ||
-              toRoleArray.includes("it_department") ||
-              toRoleArray.includes("ses_team") ||
-              toRoleArray.includes("pimo_dispatch_team")
-          ) &&
+          (toRoleArray.includes("it_department") ||
+            toRoleArray.includes("ses_team") ||
+            toRoleArray.includes("pimo_dispatch_team") ||
+            toRoleArray.includes("trustees")) &&
           action == "forward"
         ) {
           let setObj = {
@@ -382,7 +366,7 @@ export const changeBatchWorkflowState = async (req, res) => {
               `Forwarding bill ${billId} to SES Team from PIMO Mumbai`
             );
             setObj["sesDetails.dateGiven"] = now;
-            setObj["sesDetails.doneBy"] = toName;
+            setObj["sesDetails.name"] = toName;
           } else if (toRoleArray.includes("pimo_dispatch_team")) {
             console.log(
               `Forwarding bill ${billId} to PIMO Dispatch Team from PIMO Mumbai`
@@ -394,16 +378,13 @@ export const changeBatchWorkflowState = async (req, res) => {
               `Forwarding bill ${billId} to Trustees from PIMO Mumbai`
             );
             setObj["approvalDetails.directorApproval.dateGiven"] = now;
-            console.log(setObj)
+            console.log(setObj);
           }
-          console.log(setObj)
-         const naya_bill =  billWorkflow = await Bill.findByIdAndUpdate(
+          billWorkflow = await Bill.findByIdAndUpdate(
             billId,
             {
               $set: {
                 ...setObj,
-                "workflowState.currentState": "Trustees",
-                "workflowState.lastUpdated": now,
               },
               $push: {
                 "workflowState.history": {
@@ -415,9 +396,12 @@ export const changeBatchWorkflowState = async (req, res) => {
                 },
               },
             },
-            { new: true }
+            {
+              new: true,
+            }
           );
         }
+
         // Trustees to PIMO Mumbai
         else if (
           fromRoleArray.includes("trustees") &&
@@ -449,6 +433,7 @@ export const changeBatchWorkflowState = async (req, res) => {
             { new: true }
           );
         }
+
         // PIMO Mumbai to Accounts Department
         else if (
           fromRoleArray.includes("pimo_mumbai") &&
@@ -525,7 +510,7 @@ export const changeBatchWorkflowState = async (req, res) => {
           );
         }
 
-        // Backward flow - PIMO Mumbai to Site Incharge
+        //backward flow - pimo to site incharge
         else if (
           fromRoleArray.includes("pimo_mumbai") &&
           toRoleArray.includes("site_incharge") &&
@@ -553,6 +538,7 @@ export const changeBatchWorkflowState = async (req, res) => {
             { new: true }
           );
         }
+
         // Backward flow - QS Mumbai to PIMO Mumbai
         else if (
           fromRoleArray.includes("qs_mumbai") &&
@@ -579,6 +565,7 @@ export const changeBatchWorkflowState = async (req, res) => {
             { new: true }
           );
         }
+
         // Backward flow - PIMO Mumbai to QS Mumbai
         else if (
           fromRoleArray.includes("pimo_mumbai") &&
@@ -605,6 +592,7 @@ export const changeBatchWorkflowState = async (req, res) => {
             { new: true }
           );
         }
+
         // Backward flow - Trustees to PIMO Mumbai
         else if (
           fromRoleArray.includes("trustees") &&
@@ -631,6 +619,7 @@ export const changeBatchWorkflowState = async (req, res) => {
             { new: true }
           );
         }
+
         // Backward flow - PIMO Mumbai to Trustees (fixed typo in original code)
         else if (
           fromRoleArray.includes("pimo_mumbai") &&
@@ -657,6 +646,7 @@ export const changeBatchWorkflowState = async (req, res) => {
             { new: true }
           );
         }
+
         // Backward flow - Accounts Department to PIMO Mumbai
         else if (
           fromRoleArray.includes("accounts_department") &&
@@ -693,7 +683,6 @@ export const changeBatchWorkflowState = async (req, res) => {
           continue;
         }
 
-        // If workflow update was successful
         if (billWorkflow) {
           results.success.push({
             billId,
