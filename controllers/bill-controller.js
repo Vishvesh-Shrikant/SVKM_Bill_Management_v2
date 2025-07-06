@@ -12,6 +12,41 @@ import CurrencyMaster from "../models/currency-master-model.js";
 import User from "../models/user-model.js";
 import { s3Upload } from "../utils/s3.js";
 
+// Validation function for vendor number and amount
+const validateVendorNoAndAmount = (vendorNo, amount) => {
+  // Validate vendorNo - should be exactly 6 digits
+  if (!vendorNo) {
+    return {
+      valid: false,
+      message: "Vendor number is required"
+    };
+  }
+
+  const vendorNoStr = String(vendorNo);
+  if (!/^\d{6}$/.test(vendorNoStr)) {
+    return {
+      valid: false,
+      message: "Vendor number must be exactly 6 digits"
+    };
+  }
+
+  // Validate amount - should be a valid number if provided
+  if (amount !== null && amount !== undefined && amount !== '') {
+    const numAmount = Number(amount);
+    if (isNaN(numAmount)) {
+      return {
+        valid: false,
+        message: "Amount must be a valid number"
+      };
+    }
+  }
+
+  return {
+    valid: true,
+    message: "Valid"
+  };
+};
+
 const getFinancialYearPrefix = (date) => {
   const d = date || new Date();
   let currentYear = d.getFullYear().toString().substr(-2);
@@ -664,13 +699,15 @@ const patchBill = async (req, res) => {
       }
     });
 
-    // Validate vendorNo and amount
-    const check = validateVendorNoAndAmount(
-      req.body.vendorNo !== undefined ? req.body.vendorNo : existingBill.vendorNo,
-      req.body.amount !== undefined ? req.body.amount : existingBill.amount
-    );
-    if (!check.valid) {
-      return res.status(400).json({ message: check.message });
+    // Validate vendorNo and amount only if they are being updated
+    if (req.body.vendorNo !== undefined || req.body.amount !== undefined) {
+      const check = validateVendorNoAndAmount(
+        req.body.vendorNo !== undefined ? req.body.vendorNo : existingBill.vendorNo,
+        req.body.amount !== undefined ? req.body.amount : existingBill.amount
+      );
+      if (!check.valid) {
+        return res.status(400).json({ message: check.message });
+      }
     }
 
     // Set import mode to avoid validation errors
