@@ -1,7 +1,7 @@
-import { generateExcelReport, generatePDFReport } from "../utils/report-generator.js";
+import { generateExcelReport, generatePDFReport } from "../utils/report-generator-deprecated.js";
 // Update imports to use the split CSV utility files
 import {  importBillsFromExcel } from "../utils/csv-import.js";
-import { extractPatchRowsFromExcel, patchBillsFromExcelFile } from '../utils/csv-patch-extract.js';
+import {  patchBillsFromExcelFile } from '../utils/csv-patch-extract.js';
 
 import mongoose from "mongoose";
 import multer from "multer";
@@ -379,11 +379,13 @@ const importBills = async (req, res) => {
     // Return success response with clearer formatting info
     return res.status(200).json({
       success: true,
-      message: `Successfully processed ${importResult.totalProcessed} bills`,
+      message: importResult.message || `Successfully processed ${importResult.totalProcessed || 0} bills`,
       details: {
         inserted: importResult.inserted || 0,
         updated: importResult.updated || 0,
-        total: importResult.totalProcessed,
+        skipped: importResult.skipped || 0,
+        errors: importResult.errors || 0,
+        total: importResult.totalProcessed || 0,
         vendorValidation: skipVendorValidation ? 'skipped' : 'enabled',
         mode: patchOnly ? 'patch-only' : 'normal'
       },
