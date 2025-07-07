@@ -371,8 +371,8 @@ export const changeBatchWorkflowState = async (req, res) => {
             console.log(
               `Forwarding bill ${billId} to PIMO Dispatch Team from PIMO Mumbai`
             );
-            setObj["pimo.dateReceivedFromIT"] = now;
-            setObj["pimo.dateReceivedFromPIMO"] = now;
+            setObj["pimoMumbai.dateReceivedFromIT"] = now;
+            setObj["pimoMumbai.dateReceivedFromPIMO"] = now;
           } else if (toRoleArray.includes("trustees")) {
             console.log(
               `Forwarding bill ${billId} to Trustees from PIMO Mumbai`
