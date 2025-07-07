@@ -330,7 +330,7 @@ const receiveBillByPimoAccounts = async (req, res) => {
           updateFields["pimoMumbai.markReceived"] = true;
           break;
 
-        case "accounts_department":
+        case "accounts":
           updateFields["accountsDept.dateReceived"] = now;
           updateFields["accountsDept.receivedBy"] = user.name;
           updateFields["accountsDept.markReceived"] = true;

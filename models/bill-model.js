@@ -232,7 +232,7 @@ const billSchema = new mongoose.Schema(
         sesDetails: {
             no: { type: String },
             amount: { type: Number },
-            date: { type: Date },
+            dateGiven: { type: Date },
             doneBy: { type: String },
             name: { type: String },
         },
