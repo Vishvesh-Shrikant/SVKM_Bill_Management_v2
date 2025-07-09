@@ -39,7 +39,7 @@ router.get('/stats/overview', billController.getBillsStats);
 // router.patch('/:id/workflow2', authenticate, billController.changeWorkflowState);
 
 // PATCH route for editing bill by id or srNo (id is optional)
-router.patch('/:id?', billController.patchBill);
+router.patch('/:id?', multerUpload.array('files', 15), billController.patchBill);
 //receiveBillByPimoAccounts
 router.post('/receiveBill', billController.receiveBillByPimoAccounts);
 

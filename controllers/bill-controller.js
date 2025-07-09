@@ -560,6 +560,30 @@ const patchBill = async (req, res) => {
       });
     }
 
+    // Handle file attachments if present
+    let attachments = existingBill.attachments || [];
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        try {
+          const uploadResult = await s3Upload(file);
+          attachments.push({
+            fileName: uploadResult.fileName,
+            fileKey: uploadResult.fileKey,
+            fileUrl: uploadResult.url,
+          });
+        } catch (uploadError) {
+          console.error(
+            `Error uploading file ${file.originalname}:`,
+            uploadError
+          );
+          return res.status(404).json({
+            success: false,
+            message: "Files could not be uploaded, please try again",
+          });
+        }
+      }
+    }
+
     // Process QS-related fields and organize them properly
     organizeQSFields(req.body);
 
@@ -699,6 +723,11 @@ const patchBill = async (req, res) => {
       }
     });
 
+    // Add attachments if any new files were uploaded
+    if (req.files && req.files.length > 0) {
+      updates.attachments = attachments;
+    }
+
     // Validate vendorNo and amount only if they are being updated
     if (req.body.vendorNo !== undefined || req.body.amount !== undefined) {
       const check = validateVendorNoAndAmount(
@@ -718,10 +747,19 @@ const patchBill = async (req, res) => {
       vendorNo: req.body.vendorNo !== undefined ? req.body.vendorNo : existingBill.vendorNo,
       taxInvNo: req.body.taxInvNo !== undefined ? req.body.taxInvNo : existingBill.taxInvNo,
       taxInvDate: req.body.taxInvDate !== undefined ? req.body.taxInvDate : existingBill.taxInvDate,
-      region: req.body.region !== undefined ? req.body.region : existingBill.region,
       _id: { $ne: existingBill._id }
     };
-    const duplicate = await Bill.findOne(uniqueQuery);
+    const possibleDuplicates = await Bill.find(uniqueQuery);
+    // Helper to compare arrays (order-insensitive)
+    function arraysEqual(a, b) {
+      if (!Array.isArray(a) || !Array.isArray(b)) return false;
+      if (a.length !== b.length) return false;
+      const sortedA = [...a].sort();
+      const sortedB = [...b].sort();
+      return sortedA.every((val, idx) => val === sortedB[idx]);
+    }
+    const regionToCheck = req.body.region !== undefined ? req.body.region : existingBill.region;
+    const duplicate = possibleDuplicates.find(bill => arraysEqual(bill.region, regionToCheck));
     if (duplicate) {
       return res.status(400).json({
         success: false,
