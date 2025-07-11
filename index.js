@@ -20,7 +20,7 @@ app.use(
     cors({
         credentials: true,
         origin: ['http://localhost:5173', 'https://svkm-bill-tracking-frontend-1.vercel.app'],
-        methods: ["GET", "POST", "PUT", "DELETE"],
+        methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     })
 );
 

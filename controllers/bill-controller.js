@@ -1143,8 +1143,14 @@ const editPaymentInstructions = async (req, res) => {
       });
     }
 
-    const updatedBill = await Bill.findByIdAndUpdate(
-      id,
+    // const updatedBill = await Bill.findByIdAndUpdate(
+    //   id,
+    //   { $set: updateObj },
+    //   { new: true, runValidators: true }
+    // );
+
+    const updatedBill = await Bill.findOneAndUpdate(
+      { srNo: id },
       { $set: updateObj },
       { new: true, runValidators: true }
     );
