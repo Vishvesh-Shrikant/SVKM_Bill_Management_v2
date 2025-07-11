@@ -43,4 +43,11 @@ router.patch('/:id?', multerUpload.array('files', 15), billController.patchBill)
 //receiveBillByPimoAccounts
 router.post('/receiveBill', billController.receiveBillByPimoAccounts);
 
+// Endpoint to edit payment instructions (Accounts / Trustees / Admin)
+router.patch(
+  '/payment-instructions/:id',
+  authorize('admin', 'accounts', 'trustees'),
+  billController.editPaymentInstructions
+);
+
 export default router;

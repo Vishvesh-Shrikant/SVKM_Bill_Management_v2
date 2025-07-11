@@ -1108,6 +1108,66 @@ export const getBillBySrNo = async (req, res) => {
   }
 };
 
+//PATCH: Edit payment instructions for a bill (Accounts / Trustees / Admin)
+const editPaymentInstructions = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const {
+      paymentInstructions,
+      remarksForPayInstructions,
+      f110Identification,
+      paymentDate,
+      paymentAmt,
+      status,
+    } = req.body;
+
+    const updateObj = {};
+    if (paymentInstructions !== undefined)
+      updateObj["accountsDept.paymentInstructions"] = paymentInstructions;
+    if (remarksForPayInstructions !== undefined)
+      updateObj["accountsDept.remarksForPayInstructions"] = remarksForPayInstructions;
+    if (f110Identification !== undefined)
+      updateObj["accountsDept.f110Identification"] = f110Identification;
+    if (paymentDate !== undefined)
+      updateObj["accountsDept.paymentDate"] = paymentDate;
+    if (paymentAmt !== undefined)
+      updateObj["accountsDept.paymentAmt"] = paymentAmt;
+    if (status !== undefined)
+      updateObj["accountsDept.status"] = status;
+
+    if (Object.keys(updateObj).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid payment instruction fields provided for update",
+      });
+    }
+
+    const updatedBill = await Bill.findByIdAndUpdate(
+      id,
+      { $set: updateObj },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedBill) {
+      return res.status(404).json({ success: false, message: "Bill not found" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Payment instructions updated successfully",
+      bill: updatedBill,
+    });
+  } catch (error) {
+    console.error("Edit payment instructions error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update payment instructions",
+      error: error.message,
+    });
+  }
+};
+
 export default {
   createBill,
   getBill,
@@ -1127,6 +1187,7 @@ export default {
   // changeWorkflowState,
   receiveBillByPimoAccounts,
   getBillBySrNo,
+  editPaymentInstructions,
 };
 
 
