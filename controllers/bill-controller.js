@@ -10,7 +10,8 @@ import ComplianceMaster from "../models/compliance-master-model.js";
 import NatureOfWorkMaster from "../models/nature-of-work-master-model.js";
 import CurrencyMaster from "../models/currency-master-model.js";
 import User from "../models/user-model.js";
-import { s3Upload } from "../utils/s3.js";
+import { s3Delete, s3Upload } from "../utils/s3.js";
+import mongoose from "mongoose";
 
 // Validation function for vendor number and amount
 const validateVendorNoAndAmount = (vendorNo, amount) => {
@@ -18,7 +19,7 @@ const validateVendorNoAndAmount = (vendorNo, amount) => {
   if (!vendorNo) {
     return {
       valid: false,
-      message: "Vendor number is required"
+      message: "Vendor number is required",
     };
   }
 
@@ -26,24 +27,24 @@ const validateVendorNoAndAmount = (vendorNo, amount) => {
   if (!/^\d{6}$/.test(vendorNoStr)) {
     return {
       valid: false,
-      message: "Vendor number must be exactly 6 digits"
+      message: "Vendor number must be exactly 6 digits",
     };
   }
 
   // Validate amount - should be a valid number if provided
-  if (amount !== null && amount !== undefined && amount !== '') {
+  if (amount !== null && amount !== undefined && amount !== "") {
     const numAmount = Number(amount);
     if (isNaN(numAmount)) {
       return {
         valid: false,
-        message: "Amount must be a valid number"
+        message: "Amount must be a valid number",
       };
     }
   }
 
   return {
     valid: true,
-    message: "Valid"
+    message: "Valid",
   };
 };
 
@@ -55,6 +56,63 @@ const getFinancialYearPrefix = (date) => {
   } else {
     let prevYear = (parseInt(currentYear) - 1).toString().padStart(2, "0");
     return `${prevYear}`;
+  }
+};
+
+const deleteAttachment = async (req, res, next) => {
+  try {
+    const { fileKey, billId } = req.body;
+    if (!fileKey || !billId) {
+      return res
+        .status(400)
+        .json({ message: "File key and BillId is required" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(billId)) {
+      return res.status(400).json({
+        message: "Invalid Bill ID format",
+      });
+    }
+
+    const existingBill = await Bill.findById(billId);
+    if (!existingBill) {
+      return res.status(404).json({
+        message: "Bill not found",
+      });
+    }
+
+    const attachmentExists = existingBill.attachments.some(
+      (attachment) => attachment.fileKey === fileKey
+    );
+
+    if (!attachmentExists) {
+      return res.status(404).json({
+        message: "Attachment not found in this bill",
+      });
+    }
+
+    const deleteResult = await s3Delete(fileKey);
+
+    const updatedBill = await Bill.findByIdAndUpdate(
+      billId,
+      {
+        $pull: {
+          attachments: { fileKey: fileKey },
+        },
+      },
+      { new: true }
+    );
+    return res.status(201).json({
+      success: true,
+      message: "attachement deleted successfully",
+      updatedBill,
+    });
+  } catch (error) {
+    console.log("Error while deleting the attachment", error);
+    return res.status(400).json({
+      status: false,
+      message: "failed to delete the attachment",
+    });
   }
 };
 
@@ -115,7 +173,9 @@ const createBill = async (req, res) => {
       const serialPart = parseInt(highestSerialBill.srNo.substring(4));
       nextSerial = serialPart + 1;
     }
-    console.log(`[Create] Highest serial number found: ${highestSerialBill?.srNo}, next serial: ${nextSerial}`);
+    console.log(
+      `[Create] Highest serial number found: ${highestSerialBill?.srNo}, next serial: ${nextSerial}`
+    );
 
     const serialFormatted = nextSerial.toString().padStart(5, "0");
     const newSrNo = `${fyPrefix}${serialFormatted}`;
@@ -125,7 +185,17 @@ const createBill = async (req, res) => {
     const schemaFields = Object.keys(Bill.schema.paths);
     const billData = {};
     for (const field of schemaFields) {
-      if (["_id", "__v", "createdAt", "updatedAt", "vendorNo", "vendorName"].includes(field)) continue;
+      if (
+        [
+          "_id",
+          "__v",
+          "createdAt",
+          "updatedAt",
+          "vendorNo",
+          "vendorName",
+        ].includes(field)
+      )
+        continue;
       if (field === "srNo") {
         billData.srNo = newSrNo;
         continue;
@@ -217,7 +287,7 @@ const createBill = async (req, res) => {
         billData.compliance206AB = complianceDoc ? complianceDoc._id : null;
         continue;
       }
-      
+
       billData[field] = req.body[field] !== undefined ? req.body[field] : null;
     }
 
@@ -226,26 +296,27 @@ const createBill = async (req, res) => {
       vendorNo: req.body.vendorNo,
       taxInvNo: req.body.taxInvNo,
       taxInvDate: req.body.taxInvDate,
-      region: req.body.region
+      region: req.body.region,
     };
     const duplicate = await Bill.findOne(uniqueQuery);
     if (duplicate) {
       return res.status(400).json({
         success: false,
-        message: "A bill with the same vendorNo, taxInvNo, taxInvDate, and region already exists."
+        message:
+          "A bill with the same vendorNo, taxInvNo, taxInvDate, and region already exists.",
       });
     }
 
     const newBillData = {
       ...billData,
-      workflowState:{
+      workflowState: {
         currentState: "Site_Officer",
         history: [],
         lastUpdated: new Date(),
       },
       attachments,
       currentCount: 1,
-      maxCount: 1
+      maxCount: 1,
     };
     const bill = new Bill(newBillData);
     await bill.save();
@@ -257,7 +328,9 @@ const createBill = async (req, res) => {
 
 const getBills = async (req, res) => {
   try {
-    const filter = req.user.role.includes("admin") ? {} : { region: { $in: req.user.region } };
+    const filter = req.user.role.includes("admin")
+      ? {}
+      : { region: { $in: req.user.region } };
     const bills = await Bill.find(filter)
       .populate("region")
       .populate("panStatus")
@@ -268,7 +341,9 @@ const getBills = async (req, res) => {
     // Map region, panStatus, complianceMaster, currency, and natureOfWork to their names
     const mappedBills = bills.map((bill) => {
       const billObj = bill.toObject();
-      billObj.region = Array.isArray(billObj.region) ? billObj.region.map((r)=> r?.name || r) : billObj.region;
+      billObj.region = Array.isArray(billObj.region)
+        ? billObj.region.map((r) => r?.name || r)
+        : billObj.region;
       billObj.panStatus = billObj.panStatus?.name || billObj.panStatus || null;
       billObj.complianceMaster =
         billObj.complianceMaster?.compliance206AB ||
@@ -282,7 +357,7 @@ const getBills = async (req, res) => {
         billObj.compliance206AB ||
         null;
       // Overwrite vendor fields directly from populated vendor
-      if (billObj.vendor && typeof billObj.vendor === 'object') {
+      if (billObj.vendor && typeof billObj.vendor === "object") {
         billObj.vendorNo = billObj.vendor.vendorNo;
         billObj.vendorName = billObj.vendor.vendorName;
         billObj.PAN = billObj.vendor.PAN;
@@ -370,22 +445,24 @@ const getBill = async (req, res) => {
 
     let nbill = await Bill.findById(req.params.id);
     console.log("Bill without masters", nbill);
-   
-    bill = await Bill.findById(req.params.id).populate("region")
-  .populate("panStatus")
-  .populate("currency")
-  .populate("natureOfWork")
-  .populate("compliance206AB")
-  .populate("vendor"); 
 
-    
+    bill = await Bill.findById(req.params.id)
+      .populate("region")
+      .populate("panStatus")
+      .populate("currency")
+      .populate("natureOfWork")
+      .populate("compliance206AB")
+      .populate("vendor");
+
     // console.log("Retrieved bill:" , bill);
-    console.log("Retrieved bill nature of work:" , bill?.natureOfWork);
+    console.log("Retrieved bill nature of work:", bill?.natureOfWork);
     if (!bill) {
       return res.status(404).json({ message: "Bill not found" });
     }
     const billObj = bill.toObject();
-    billObj.region = Array.isArray(billObj.region) ? billObj.region.map((r) => r?.name || r) : billObj.region;
+    billObj.region = Array.isArray(billObj.region)
+      ? billObj.region.map((r) => r?.name || r)
+      : billObj.region;
     billObj.panStatus = billObj.panStatus?.name || billObj.panStatus || null;
     billObj.complianceMaster =
       billObj.complianceMaster?.compliance206AB ||
@@ -399,7 +476,7 @@ const getBill = async (req, res) => {
       billObj.compliance206AB ||
       null;
     // Overwrite vendor fields directly from populated vendor
-    if (billObj.vendor && typeof billObj.vendor === 'object') {
+    if (billObj.vendor && typeof billObj.vendor === "object") {
       billObj.vendorNo = billObj.vendor.vendorNo;
       billObj.vendorName = billObj.vendor.vendorName;
       billObj.PAN = billObj.vendor.PAN;
@@ -500,7 +577,9 @@ const updateBill = async (req, res) => {
 
     // Validate vendorNo and amount
     const check = validateVendorNoAndAmount(
-      req.body.vendorNo !== undefined ? req.body.vendorNo : existingBill.vendorNo,
+      req.body.vendorNo !== undefined
+        ? req.body.vendorNo
+        : existingBill.vendorNo,
       req.body.amount !== undefined ? req.body.amount : existingBill.amount
     );
     if (!check.valid) {
@@ -731,7 +810,9 @@ const patchBill = async (req, res) => {
     // Validate vendorNo and amount only if they are being updated
     if (req.body.vendorNo !== undefined || req.body.amount !== undefined) {
       const check = validateVendorNoAndAmount(
-        req.body.vendorNo !== undefined ? req.body.vendorNo : existingBill.vendorNo,
+        req.body.vendorNo !== undefined
+          ? req.body.vendorNo
+          : existingBill.vendorNo,
         req.body.amount !== undefined ? req.body.amount : existingBill.amount
       );
       if (!check.valid) {
@@ -744,10 +825,19 @@ const patchBill = async (req, res) => {
 
     // Uniqueness check for vendorNo, taxInvNo, taxInvDate, region (ignore self)
     const uniqueQuery = {
-      vendorNo: req.body.vendorNo !== undefined ? req.body.vendorNo : existingBill.vendorNo,
-      taxInvNo: req.body.taxInvNo !== undefined ? req.body.taxInvNo : existingBill.taxInvNo,
-      taxInvDate: req.body.taxInvDate !== undefined ? req.body.taxInvDate : existingBill.taxInvDate,
-      _id: { $ne: existingBill._id }
+      vendorNo:
+        req.body.vendorNo !== undefined
+          ? req.body.vendorNo
+          : existingBill.vendorNo,
+      taxInvNo:
+        req.body.taxInvNo !== undefined
+          ? req.body.taxInvNo
+          : existingBill.taxInvNo,
+      taxInvDate:
+        req.body.taxInvDate !== undefined
+          ? req.body.taxInvDate
+          : existingBill.taxInvDate,
+      _id: { $ne: existingBill._id },
     };
     const possibleDuplicates = await Bill.find(uniqueQuery);
     // Helper to compare arrays (order-insensitive)
@@ -758,12 +848,16 @@ const patchBill = async (req, res) => {
       const sortedB = [...b].sort();
       return sortedA.every((val, idx) => val === sortedB[idx]);
     }
-    const regionToCheck = req.body.region !== undefined ? req.body.region : existingBill.region;
-    const duplicate = possibleDuplicates.find(bill => arraysEqual(bill.region, regionToCheck));
+    const regionToCheck =
+      req.body.region !== undefined ? req.body.region : existingBill.region;
+    const duplicate = possibleDuplicates.find((bill) =>
+      arraysEqual(bill.region, regionToCheck)
+    );
     if (duplicate) {
       return res.status(400).json({
         success: false,
-        message: "A bill with the same vendorNo, taxInvNo, taxInvDate, and region already exists."
+        message:
+          "A bill with the same vendorNo, taxInvNo, taxInvDate, and region already exists.",
       });
     }
 
@@ -1070,13 +1164,14 @@ export const getBillsByWorkflowState = async (req, res) => {
   }
 };
 
-
 // Get bill by srNo (7 digits)
 export const getBillBySrNo = async (req, res) => {
   try {
     const { srNo } = req.params;
     if (!/^\d{7}$/.test(srNo)) {
-      return res.status(400).json({ message: "Invalid srNo format. Must be 7 digits." });
+      return res
+        .status(400)
+        .json({ message: "Invalid srNo format. Must be 7 digits." });
     }
     const bill = await Bill.findOne({ srNo })
       .populate("region")
@@ -1089,7 +1184,9 @@ export const getBillBySrNo = async (req, res) => {
       return res.status(404).json({ message: "Bill not found" });
     }
     const billObj = bill.toObject();
-    billObj.region = Array.isArray(billObj.region) ? billObj.region.map((r) => r?.name || r) : billObj.region;
+    billObj.region = Array.isArray(billObj.region)
+      ? billObj.region.map((r) => r?.name || r)
+      : billObj.region;
     billObj.panStatus = billObj.panStatus?.name || billObj.panStatus || null;
     billObj.complianceMaster =
       billObj.complianceMaster?.compliance206AB ||
@@ -1126,15 +1223,15 @@ const editPaymentInstructions = async (req, res) => {
     if (paymentInstructions !== undefined)
       updateObj["accountsDept.paymentInstructions"] = paymentInstructions;
     if (remarksForPayInstructions !== undefined)
-      updateObj["accountsDept.remarksForPayInstructions"] = remarksForPayInstructions;
+      updateObj["accountsDept.remarksForPayInstructions"] =
+        remarksForPayInstructions;
     if (f110Identification !== undefined)
       updateObj["accountsDept.f110Identification"] = f110Identification;
     if (paymentDate !== undefined)
       updateObj["accountsDept.paymentDate"] = paymentDate;
     if (paymentAmt !== undefined)
       updateObj["accountsDept.paymentAmt"] = paymentAmt;
-    if (status !== undefined)
-      updateObj["accountsDept.status"] = status;
+    if (status !== undefined) updateObj["accountsDept.status"] = status;
 
     if (Object.keys(updateObj).length === 0) {
       return res.status(400).json({
@@ -1156,7 +1253,9 @@ const editPaymentInstructions = async (req, res) => {
     );
 
     if (!updatedBill) {
-      return res.status(404).json({ success: false, message: "Bill not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Bill not found" });
     }
 
     return res.status(200).json({
@@ -1194,8 +1293,8 @@ export default {
   receiveBillByPimoAccounts,
   getBillBySrNo,
   editPaymentInstructions,
+  deleteAttachment,
 };
-
 
 // Method to regenerate serial numbers for all bills
 // export const regenerateAllSerialNumbers = async (req, res) => {
