@@ -13,25 +13,131 @@ const masterController = {
   // Vendor Master CRUD
   async createVendor(req, res) {
     try {
-      const vendor = new Vendor(req.body);
+      const vendorData = { ...req.body };
+      
+      // Convert compliance status name to ObjectId
+      if (req.body.complianceStatus) {
+        const compliance = await Compliance.findOne({ 
+          compliance206AB: req.body.complianceStatus 
+        });
+        if (!compliance) {
+          return res.status(400).json({ 
+            error: `Compliance status '${req.body.complianceStatus}' not found. Please use a valid compliance status.` 
+          });
+        }
+        vendorData.complianceStatus = compliance._id;
+      }
+      
+      // Convert PAN status name to ObjectId
+      if (req.body.PANStatus) {
+        const PanStatus = (await import('../models/pan-status-master-model.js')).default;
+        const panStatus = await PanStatus.findOne({ 
+          name: req.body.PANStatus.toUpperCase() 
+        });
+        if (!panStatus) {
+          return res.status(400).json({ 
+            error: `PAN status '${req.body.PANStatus}' not found. Please use a valid PAN status.` 
+          });
+        }
+        vendorData.PANStatus = panStatus._id;
+      }
+      
+      const vendor = new Vendor(vendorData);
       await vendor.save();
-      res.status(201).json(vendor);
+      
+      // Populate and return with names instead of IDs
+      await vendor.populate('complianceStatus', 'compliance206AB');
+      await vendor.populate('PANStatus', 'name description');
+      
+      // Transform response to show names instead of ObjectIds
+      const response = vendor.toObject();
+      response.complianceStatus = vendor.complianceStatus?.compliance206AB || null;
+      response.PANStatus = vendor.PANStatus?.name || null;
+      
+      res.status(201).json(response);
     } catch (err) {
       res.status(400).json({ error: err.message });
     }
   },
   async getVendors(req, res) {
     try {
-      const vendors = await Vendor.find();
-      res.json(vendors);
+      const vendors = await Vendor.find()
+        .populate('complianceStatus', 'compliance206AB')
+        .populate('PANStatus', 'name description');
+      
+      // Transform response to show names instead of ObjectId references
+      const transformedVendors = vendors.map(vendor => {
+        const vendorObj = vendor.toObject();
+        vendorObj.complianceStatus = vendor.complianceStatus?.compliance206AB || null;
+        vendorObj.PANStatus = vendor.PANStatus?.name || null;
+        return vendorObj;
+      });
+      
+      res.json(transformedVendors);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  },
+  async getVendorById(req, res) {
+    try {
+      const vendor = await Vendor.findById(req.params.id)
+        .populate('complianceStatus', 'compliance206AB')
+        .populate('PANStatus', 'name description');
+      
+      if (!vendor) {
+        return res.status(404).json({ error: 'Vendor not found' });
+      }
+      
+      res.json(vendor);
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   },
   async updateVendor(req, res) {
     try {
-      const vendor = await Vendor.findByIdAndUpdate(req.params.id, req.body, { new: true });
-      res.json(vendor);
+      const updateData = { ...req.body };
+      
+      // Convert compliance status name to ObjectId if provided
+      if (req.body.complianceStatus) {
+        const compliance = await Compliance.findOne({ 
+          compliance206AB: req.body.complianceStatus 
+        });
+        if (!compliance) {
+          return res.status(400).json({ 
+            error: `Compliance status '${req.body.complianceStatus}' not found. Please use a valid compliance status.` 
+          });
+        }
+        updateData.complianceStatus = compliance._id;
+      }
+      
+      // Convert PAN status name to ObjectId if provided
+      if (req.body.PANStatus) {
+        const PanStatus = (await import('../models/pan-status-master-model.js')).default;
+        const panStatus = await PanStatus.findOne({ 
+          name: req.body.PANStatus.toUpperCase() 
+        });
+        if (!panStatus) {
+          return res.status(400).json({ 
+            error: `PAN status '${req.body.PANStatus}' not found. Please use a valid PAN status.` 
+          });
+        }
+        updateData.PANStatus = panStatus._id;
+      }
+      
+      const vendor = await Vendor.findByIdAndUpdate(req.params.id, updateData, { new: true })
+        .populate('complianceStatus', 'compliance206AB')
+        .populate('PANStatus', 'name description');
+      
+      if (!vendor) {
+        return res.status(404).json({ error: 'Vendor not found' });
+      }
+      
+      // Transform response to show names instead of ObjectIds
+      const response = vendor.toObject();
+      response.complianceStatus = vendor.complianceStatus?.compliance206AB || null;
+      response.PANStatus = vendor.PANStatus?.name || null;
+      
+      res.json(response);
     } catch (err) {
       res.status(400).json({ error: err.message });
     }

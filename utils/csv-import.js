@@ -114,7 +114,7 @@ export const importBillsFromExcel = async (filePath, validVendorNos = [], patchO
           taxInvNo: billData.taxInvNo,
           taxInvDate: billData.taxInvDate,
           region: billData.region
-        });
+      });
         
         // Check if bill already exists by srNo
         const existingBill = await Bill.findOne({ 

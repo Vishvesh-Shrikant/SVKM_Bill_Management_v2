@@ -102,15 +102,8 @@ const billSchema = new mongoose.Schema(
             ref: "VendorMaster",
             required: true,
         },
-        gstNumber: { type: String, 
-            // required: true 
-        },
-        // Removed compliance206AB field as complianceMaster reference is used instead
-        panStatus: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "PanStatusMaster",
-            required: false, // Set to true if you want to enforce PAN status selection
-        },
+        // All vendor-related fields (vendorNo, vendorName, gstNumber, panStatus, compliance206AB) 
+        // are now derived from the vendor reference to ensure data consistency
         poCreated: { type: String, enum: ["Yes", "No"], required: true },
         poNo: { type: String },
         poDate: { type: Date },
@@ -305,11 +298,7 @@ const billSchema = new mongoose.Schema(
             type: Number,
             default: 1,
         },
-        compliance206AB: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "ComplianceMaster",
-            required: false
-        },
+        // compliance206AB field removed - now populated from vendor.complianceStatus
         attachments: [
             {
                 fileName: { type: String },
