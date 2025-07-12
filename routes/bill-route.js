@@ -1,28 +1,36 @@
-import express from 'express';
-import billController from '../controllers/bill-controller.js';
-import { authenticate, authorize, validateWorkflowTransition, validateStateAccess, authMiddleware } from '../middleware/middleware.js';
-import { multerUpload } from '../utils/multer.js';
+import express from "express";
+import billController from "../controllers/bill-controller.js";
+import {
+  authenticate,
+  authorize,
+  validateWorkflowTransition,
+  validateStateAccess,
+  authMiddleware,
+} from "../middleware/middleware.js";
+import { multerUpload } from "../utils/multer.js";
 
 const router = express.Router();
 router.use(authenticate);
 
-
 router.post(
-    '/', 
-    multerUpload.array("files", 15), 
-    // authorize('admin', 'site_officer'), 
-    billController.createBill
+  "/",
+  multerUpload.array("files", 15),
+  // authorize('admin', 'site_officer'),
+  billController.createBill
 );
-router.get('/', authMiddleware, billController.getBills);
-router.get('/:id', billController.getBill);
-router.get('/srno/:srNo', billController.getBillBySrNo); // Get bill by srNo (7 digits)
-router.put('/:id', authorize('admin', 'site_officer'), billController.updateBill);
-router.delete('/:id', authorize('admin'), billController.deleteBill);
-
+router.get("/", authMiddleware, billController.getBills);
+router.get("/:id", billController.getBill);
+router.get("/srno/:srNo", billController.getBillBySrNo); // Get bill by srNo (7 digits)
+router.put(
+  "/:id",
+  authorize("admin", "site_officer"),
+  billController.updateBill
+);
+router.delete("/:id", authorize("admin"), billController.deleteBill);
 
 // Bill filtering routes
-router.post('/filter', billController.filterBills);
-router.get('/stats/overview', billController.getBillsStats);
+router.post("/filter", billController.filterBills);
+router.get("/stats/overview", billController.getBillsStats);
 
 // Serial number regeneration route - admin only
 // router.post('/regenerate-serial-numbers', authorize('admin'), billController.regenerateAllSerialNumbers);
@@ -39,15 +47,22 @@ router.get('/stats/overview', billController.getBillsStats);
 // router.patch('/:id/workflow2', authenticate, billController.changeWorkflowState);
 
 // PATCH route for editing bill by id or srNo (id is optional)
-router.patch('/:id?', multerUpload.array('files', 15), billController.patchBill);
+router.patch(
+  "/:id?",
+  multerUpload.array("files", 15),
+  billController.patchBill
+);
 //receiveBillByPimoAccounts
-router.post('/receiveBill', billController.receiveBillByPimoAccounts);
+router.post("/receiveBill", billController.receiveBillByPimoAccounts);
 
 // Endpoint to edit payment instructions (Accounts / Trustees / Admin)
 router.patch(
-  '/payment-instructions/:id',
-  authorize('admin', 'accounts', 'trustees'),
+  "/payment-instructions/:id",
+  authorize("admin", "accounts", "trustees"),
   billController.editPaymentInstructions
 );
+
+//Delete the attachment for a particular bill
+router.post("/attachment", billController.deleteAttachment);
 
 export default router;
