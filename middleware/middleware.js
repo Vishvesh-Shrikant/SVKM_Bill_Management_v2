@@ -191,3 +191,78 @@ export const validateStateAccess = (req, res, next) => {
   
   next();
 };
+
+// Validate field access based on team
+import { teamFieldAccessControl, roleToTeamMap } from '../constants/teamFieldAccess.js';
+
+export const validateTeamFieldAccess = (req, res, next) => {
+  try {
+    const userRole = req.user.role;
+    
+    // Admin can update any field
+    if (userRole === 'admin') {
+      return next();
+    }
+    
+    // Get the team for this user's role
+    const team = roleToTeamMap[userRole];
+    if (!team) {
+      return res.status(403).json({
+        success: false,
+        message: `User with role '${userRole}' is not assigned to any team with field update permissions`
+      });
+    }
+    
+    // Get allowed fields for this team
+    const allowedFields = teamFieldAccessControl[team];
+    if (!allowedFields) {
+      return res.status(403).json({
+        success: false,
+        message: `No allowed fields defined for team ${team}`
+      });
+    }
+    
+    // Check if the request body has any fields that are not allowed for this team
+    const requestBodyFields = Object.keys(req.body);
+    
+    // Flattened list of all field paths in the request body
+    const flattenedRequestFields = [];
+    
+    // Recursively collect all field paths in the request body
+    const collectFields = (obj, prefix = '') => {
+      for (const key in obj) {
+        if (obj.hasOwnProperty(key)) {
+          const fieldPath = prefix ? `${prefix}.${key}` : key;
+          
+          if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
+            collectFields(obj[key], fieldPath);
+          } else {
+            flattenedRequestFields.push(fieldPath);
+          }
+        }
+      }
+    };
+    
+    collectFields(req.body);
+    
+    // Check if any requested field is not allowed
+    const unauthorizedFields = flattenedRequestFields.filter(field => !allowedFields.includes(field));
+    
+    if (unauthorizedFields.length > 0) {
+      return res.status(403).json({
+        success: false,
+        message: `User with role '${userRole}' cannot update the following fields: ${unauthorizedFields.join(', ')}`,
+        allowedFields
+      });
+    }
+    
+    next();
+  } catch (error) {
+    console.error('Field access validation error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error validating field access', 
+      error: error.message 
+    });
+  }
+};

@@ -263,6 +263,12 @@ const billSchema = new mongoose.Schema(
                 default: "Unpaid",
             },
         },
+        // MIRO details for Accounts Team
+        miroDetails: {
+            number: { type: String },  // MIRO no
+            date: { type: Date },      // MIRO Dt
+            amount: { type: Number },  // MIRO Amt
+        },
         billDate: { type: Date, required: true },
         amount: { type: Number, required: true },
         currency: {

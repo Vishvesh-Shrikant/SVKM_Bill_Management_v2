@@ -2,6 +2,7 @@ import { generateExcelReport, generatePDFReport } from "../utils/report-generato
 // Update imports to use the split CSV utility files
 import {  importBillsFromExcel } from "../utils/csv-import.js";
 import {  patchBillsFromExcelFile } from '../utils/csv-patch-extract.js';
+import { insertVendorsFromExcel, updateVendorComplianceFromExcel } from '../utils/vendor-csv-utils.js';
 
 import mongoose from "mongoose";
 import multer from "multer";
@@ -14,7 +15,21 @@ import Bill from '../models/bill-model.js';
 // Define a schema for VendorMaster if not already defined
 const vendorMasterSchema = new mongoose.Schema({
   vendorNo: { type: String, required: true },
-  vendorName: { type: String, required: true }
+  vendorName: { type: String, required: true },
+  PAN: { type: String, required: true },
+  GSTNumber: { type: String, required: true },
+  complianceStatus: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'ComplianceMaster', 
+    required: true 
+  }, 
+  PANStatus: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'PanStatusMaster', 
+    required: true 
+  }, 
+  emailIds: { type: [String], required: true }, // Still an array but we'll only use first value
+  phoneNumbers: { type: [String], required: true }, // Still an array but we'll only use first value
 }, { collection: 'vendorMasters' });
 
 // Try to load VendorMaster model dynamically
@@ -446,19 +461,52 @@ const patchBillsFromExcel = async (req, res) => {
         message: "No file uploaded"
       });
     }
+    
+    // Get team from query parameter or user role
+    let teamName = req.query.team;
+    
+    // If no team is specified in the query, determine from user role if available
+    if (!teamName && req.user && req.user.role) {
+      // Map user roles to teams
+      const roleToTeam = {
+        'qs_site': 'QS Team',
+        'qs_mumbai': 'QS Team',
+        'site_officer': 'Site Team',
+        'site_engineer': 'Site Team',
+        'site_incharge': 'Site Team',
+        'site_architect': 'Site Team',
+        'pimo_mumbai': 'PIMO & MIGO/SES Team',
+        'site_pimo': 'PIMO & MIGO/SES Team',
+        'accounts': 'Accounts Team',
+      };
+      
+      teamName = roleToTeam[req.user.role];
+    }
+    
+    // Admin users can bypass team restrictions
+    const isAdmin = req.user && req.user.role === 'admin';
+    if (isAdmin) {
+      teamName = null; // Allow all fields
+    }
+    
     const uploadedFile = req.files[0];
     const tempDir = os.tmpdir();
     const tempFilePath = path.join(tempDir, uploadedFile.originalname);
-    console.log(`Processing file for patch: ${uploadedFile.originalname}`);
+    console.log(`Processing file for patch: ${uploadedFile.originalname} by team: ${teamName || 'unrestricted'}`);
     fs.writeFileSync(tempFilePath, uploadedFile.buffer);
-    // Call the patch logic
-    const patchResult = await patchBillsFromExcelFile(tempFilePath);
+    
+    // Call the patch logic with team name
+    const patchResult = await patchBillsFromExcelFile(tempFilePath, teamName);
+    
     if (fs.existsSync(tempFilePath)) {
       fs.unlinkSync(tempFilePath);
     }
+    
     return res.status(200).json({
       success: true,
-      message: 'Patch process complete',
+      message: teamName 
+        ? `Patch process complete for ${teamName}` 
+        : 'Patch process complete (unrestricted)',
       details: patchResult
     });
   } catch (error) {
@@ -610,10 +658,112 @@ const patchBillsFromExcel = async (req, res) => {
 //   }
 // };
 
+// Function to import all vendor data from Excel/CSV
+const importVendors = async (req, res) => {
+  try {
+    await new Promise((resolve, reject) => {
+      upload(req, res, (err) => {
+        if (err instanceof multer.MulterError) {
+          reject(new Error(`File upload error: ${err.message}`));
+        } else if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+    
+    if (!req.files || !req.files.length) {
+      return res.status(400).json({
+        success: false,
+        message: "No file uploaded"
+      });
+    }
+    
+    const uploadedFile = req.files[0];
+    const tempDir = os.tmpdir();
+    const tempFilePath = path.join(tempDir, uploadedFile.originalname);
+    console.log(`Processing vendor import file: ${uploadedFile.originalname}`);
+    
+    fs.writeFileSync(tempFilePath, uploadedFile.buffer);
+    
+    const importResult = await insertVendorsFromExcel(tempFilePath);
+    
+    if (fs.existsSync(tempFilePath)) {
+      fs.unlinkSync(tempFilePath);
+    }
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Vendor import process complete',
+      details: importResult
+    });
+  } catch (error) {
+    console.error('Vendor import error:', error);
+    return res.status(400).json({
+      success: false,
+      message: 'Error importing vendors',
+      error: error.message
+    });
+  }
+};
+
+// Function to update only compliance and PAN status for vendors
+const updateVendorCompliance = async (req, res) => {
+  try {
+    await new Promise((resolve, reject) => {
+      upload(req, res, (err) => {
+        if (err instanceof multer.MulterError) {
+          reject(new Error(`File upload error: ${err.message}`));
+        } else if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+    
+    if (!req.files || !req.files.length) {
+      return res.status(400).json({
+        success: false,
+        message: "No file uploaded"
+      });
+    }
+    
+    const uploadedFile = req.files[0];
+    const tempDir = os.tmpdir();
+    const tempFilePath = path.join(tempDir, uploadedFile.originalname);
+    console.log(`Processing vendor compliance update file: ${uploadedFile.originalname}`);
+    
+    fs.writeFileSync(tempFilePath, uploadedFile.buffer);
+    
+    const updateResult = await updateVendorComplianceFromExcel(tempFilePath);
+    
+    if (fs.existsSync(tempFilePath)) {
+      fs.unlinkSync(tempFilePath);
+    }
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Vendor compliance update process complete',
+      details: updateResult
+    });
+  } catch (error) {
+    console.error('Vendor compliance update error:', error);
+    return res.status(400).json({
+      success: false,
+      message: 'Error updating vendor compliance',
+      error: error.message
+    });
+  }
+};
+
 export default { 
   generateReport,
   importBills,
-  patchBillsFromExcel
+  patchBillsFromExcel,
+  importVendors,
+  updateVendorCompliance
   // fixBillSerialNumbers,
   // bulkFixSerialNumbers
 };

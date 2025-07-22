@@ -129,7 +129,62 @@ async function mapReferenceIfNeeded(field, value) {
   return value;
 }
 
-export async function patchBillsFromExcelFile(filePath) {
+// Define team field restrictions
+const teamFieldRestrictions = {
+  "QS Team": [
+    "copDetails.date",
+    "copDetails.amount"
+  ],
+  "Site Team": [
+    "migoDetails.number",
+    "migoDetails.date",
+    "migoDetails.amount"
+  ],
+  "PIMO & MIGO/SES Team": [
+    "sesDetails.number",
+    "sesDetails.amount",
+    "sesDetails.date"
+  ],
+  "Accounts Team": [
+    "accountsDept.f110Identification",
+    "accountsDept.paymentDate",
+    "accountsDept.hardCopy",
+    "accountsDept.accountsIdentification",
+    "accountsDept.paymentAmt",
+    "miroDetails.number",
+    "miroDetails.date",
+    "miroDetails.amount"
+  ]
+};
+
+// Map Excel header names to their corresponding DB fields for specialized updates
+const specialFieldsMap = {
+  // QS Team fields
+  'COP Dt': 'copDetails.date',
+  'COP Amt': 'copDetails.amount',
+  
+  // Site Team fields
+  'MIGO no': 'migoDetails.number',
+  'MIGO Dt': 'migoDetails.date',
+  'MIGO Amt': 'migoDetails.amount',
+  
+  // PIMO & MIGO/SES Team fields
+  'SES no': 'sesDetails.number',
+  'SES Amt': 'sesDetails.amount',
+  'SES Dt': 'sesDetails.date',
+  
+  // Accounts Team fields
+  'F110 Identification': 'accountsDept.f110Identification',
+  'Dt of Payment': 'accountsDept.paymentDate',
+  'Hard Copy': 'accountsDept.hardCopy',
+  'Accts Identification': 'accountsDept.accountsIdentification',
+  'Payment Amt': 'accountsDept.paymentAmt',
+  'MIRO no': 'miroDetails.number',
+  'MIRO Dt': 'miroDetails.date',
+  'MIRO Amt': 'miroDetails.amount'
+};
+
+export async function patchBillsFromExcelFile(filePath, teamName = null) {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(filePath);
   const worksheet = workbook.getWorksheet(1);
@@ -150,6 +205,14 @@ export async function patchBillsFromExcelFile(filePath) {
   }
 
   let updated = 0, skipped = 0;
+  let updateSummary = {};
+  let ignoredFieldsCount = {};
+  
+  // Determine which fields are allowed based on team
+  const allowedFields = teamName ? teamFieldRestrictions[teamName] : null;
+  
+  console.log(`[PATCH] Team: ${teamName || 'unrestricted'}, Allowed fields:`, allowedFields || 'all');
+
   for (let rowNumber = headerRowIdx + 1; rowNumber <= worksheet.rowCount; rowNumber++) {
     const row = worksheet.getRow(rowNumber);
     if (!row.getCell(1).value) continue;
@@ -163,7 +226,24 @@ export async function patchBillsFromExcelFile(filePath) {
     const bill = await Bill.findOne({ srNo });
     if (!bill) { skipped++; continue; }
     const updateObj = {};
+    
+    // Process standard field mappings first
     for (const [header, dbField] of Object.entries(headerToDbField)) {
+      // Skip if not filled
+      if (!isFilled(rowData[header])) continue;
+      
+      // If team restrictions are active, only allow specific updates
+      // Other fields in Excel are allowed but won't be updated
+      if (allowedFields && !allowedFields.includes(dbField)) {
+        console.log(`[SKIPPING] Field ${dbField} is not in allowed list for team ${teamName}`);
+        // Track ignored fields for reporting
+        if (!ignoredFieldsCount[dbField]) {
+          ignoredFieldsCount[dbField] = 0;
+        }
+        ignoredFieldsCount[dbField]++;
+        continue; // We don't count these as "restricted" - they're just ignored
+      }
+      
       if (header === 'Type of inv') {
         // Special mapping to natureOfWork
         const typeVal = rowData[header];
@@ -175,7 +255,7 @@ export async function patchBillsFromExcelFile(filePath) {
         }
         continue;
       }
-      if (!isFilled(rowData[header])) continue;
+      
       let val = rowData[header];
       val = parseDateIfNeeded(dbField, val);
       val = parseNumberIfNeeded(dbField, val);
@@ -186,6 +266,56 @@ export async function patchBillsFromExcelFile(filePath) {
       }
       updateObj[dbField] = val;
     }
+    
+    // Process special team-specific fields (nested fields)
+    for (const [header, dbField] of Object.entries(specialFieldsMap)) {
+      if (!isFilled(rowData[header])) continue;
+      
+      // Skip if this field is not allowed for the specified team
+      // But don't count as restricted - just quietly ignore it
+      if (allowedFields && !allowedFields.includes(dbField)) {
+        console.log(`[SKIPPING] Field ${dbField} is not in allowed list for team ${teamName}`);
+        // Track ignored fields for reporting
+        if (!ignoredFieldsCount[dbField]) {
+          ignoredFieldsCount[dbField] = 0;
+        }
+        ignoredFieldsCount[dbField]++;
+        continue;
+      }
+      
+      // Get the value and parse it appropriately
+      let val = rowData[header];
+      
+      // Handle date fields
+      if (dbField.includes('.date') || dbField.includes('Dt')) {
+        val = parseDateIfNeeded(dbField, val);
+      }
+      
+      // Handle numeric fields
+      if (dbField.includes('.amount') || dbField.includes('Amt')) {
+        val = parseNumberIfNeeded(dbField, val);
+      }
+      
+      // Set the nested field in the update object
+      const fieldParts = dbField.split('.');
+      if (fieldParts.length === 2) {
+        // Handle nested fields
+        if (!updateObj[fieldParts[0]]) {
+          updateObj[fieldParts[0]] = {};
+        }
+        updateObj[fieldParts[0]][fieldParts[1]] = val;
+      } else {
+        // Handle regular fields
+        updateObj[dbField] = val;
+      }
+      
+      // Track which fields are being updated
+      if (!updateSummary[dbField]) {
+        updateSummary[dbField] = 0;
+      }
+      updateSummary[dbField]++;
+    }
+    
     // Never nullify: only update fields that are filled in Excel
     if (Object.keys(updateObj).length > 0) {
       await Bill.updateOne({ _id: bill._id }, { $set: updateObj });
@@ -195,6 +325,24 @@ export async function patchBillsFromExcelFile(filePath) {
       skipped++;
     }
   }
-  console.log(`[PATCH SUMMARY] Updated: ${updated}, Skipped: ${skipped}`);
-  return { updated, skipped };
+  // Count total ignored field updates
+  const totalIgnoredUpdates = Object.values(ignoredFieldsCount).reduce((sum, count) => sum + count, 0);
+  
+  console.log(`[PATCH SUMMARY] Updated: ${updated}, Skipped: ${skipped}, Ignored fields: ${Object.keys(ignoredFieldsCount).length}, Ignored updates: ${totalIgnoredUpdates}`);
+  
+  return { 
+    updated, 
+    skipped,
+    teamName,
+    fieldUpdateSummary: updateSummary,
+    ignoredFields: {
+      count: Object.keys(ignoredFieldsCount).length,
+      totalUpdatesIgnored: totalIgnoredUpdates,
+      fields: ignoredFieldsCount
+    },
+    teamRestrictions: {
+      active: !!teamName,
+      allowedFields: allowedFields || 'all fields'
+    }
+  };
 }
