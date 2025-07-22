@@ -65,4 +65,9 @@ router.patch(
 //Delete the attachment for a particular bill
 router.post("/attachment", billController.deleteAttachment);
 
+// todo: milan bhai abhi add kiya
+router.post("/not-received-pimo", billController.notReceivedPimo);
+router.post("/not-received-account", billController.notReceivedAccounts);
+router.post("/reject-payment", billController.accountsPaymentReject);
+
 export default router;

@@ -171,7 +171,16 @@ const createBill = async (req, res) => {
     for (const field of schemaFields) {
       if (["_id", "__v", "createdAt", "updatedAt"].includes(field)) continue;
       // Skip vendor-related fields as they're derived from vendor reference
-      if (["vendorNo", "vendorName", "gstNumber", "panStatus", "compliance206AB"].includes(field)) continue;
+      if (
+        [
+          "vendorNo",
+          "vendorName",
+          "gstNumber",
+          "panStatus",
+          "compliance206AB",
+        ].includes(field)
+      )
+        continue;
       if (field === "srNo") {
         billData.srNo = newSrNo;
         continue;
@@ -232,7 +241,7 @@ const createBill = async (req, res) => {
         continue;
       }
       // compliance206AB field removed - now derived from vendor
-      
+
       billData[field] = req.body[field] !== undefined ? req.body[field] : null;
     }
 
@@ -284,29 +293,33 @@ const getBills = async (req, res) => {
         path: "vendor",
         populate: [
           { path: "PANStatus", model: "PanStatusMaster" },
-          { path: "complianceStatus", model: "ComplianceMaster" }
-        ]
+          { path: "complianceStatus", model: "ComplianceMaster" },
+        ],
       }); // Populate vendor with nested PAN status and compliance
     // Map region, currency, and natureOfWork to their names
     const mappedBills = bills.map((bill) => {
       const billObj = bill.toObject();
-      billObj.region = Array.isArray(billObj.region) ? billObj.region.map((r)=> r?.name || r) : billObj.region;
+      billObj.region = Array.isArray(billObj.region)
+        ? billObj.region.map((r) => r?.name || r)
+        : billObj.region;
       billObj.currency = billObj.currency?.currency || billObj.currency || null;
       billObj.natureOfWork =
         billObj.natureOfWork?.natureOfWork || billObj.natureOfWork || null;
-      
+
       // Overwrite vendor fields directly from populated vendor
       if (billObj.vendor && typeof billObj.vendor === "object") {
         billObj.vendorNo = billObj.vendor.vendorNo;
         billObj.vendorName = billObj.vendor.vendorName;
         billObj.PAN = billObj.vendor.PAN;
         billObj.gstNumber = billObj.vendor.GSTNumber;
-        
+
         // Get compliance and PAN status from populated vendor references
-        billObj.compliance206AB = billObj.vendor.complianceStatus?.compliance206AB || 
-                                  billObj.vendor.complianceStatus || null;
-        billObj.panStatus = billObj.vendor.PANStatus?.name || 
-                           billObj.vendor.PANStatus || null;
+        billObj.compliance206AB =
+          billObj.vendor.complianceStatus?.compliance206AB ||
+          billObj.vendor.complianceStatus ||
+          null;
+        billObj.panStatus =
+          billObj.vendor.PANStatus?.name || billObj.vendor.PANStatus || null;
       }
       // Remove the vendor object itself
       delete billObj.vendor;
@@ -320,7 +333,7 @@ const getBills = async (req, res) => {
 
 const receiveBillByPimoAccounts = async (req, res) => {
   try {
-    const { billId, role } = req.body;
+    const { billId, role, accept } = req.body;
     if (!billId) {
       return res.status(400).json({
         success: false,
@@ -388,42 +401,46 @@ const getBill = async (req, res) => {
 
     let nbill = await Bill.findById(req.params.id);
     console.log("Bill without masters", nbill);
-   
-    bill = await Bill.findById(req.params.id).populate("region")
-  .populate("currency")
-  .populate("natureOfWork")
-  .populate({
-    path: "vendor",
-    populate: [
-      { path: "PANStatus", model: "PanStatusMaster" },
-      { path: "complianceStatus", model: "ComplianceMaster" }
-    ]
-  }); 
 
-    
+    bill = await Bill.findById(req.params.id)
+      .populate("region")
+      .populate("currency")
+      .populate("natureOfWork")
+      .populate({
+        path: "vendor",
+        populate: [
+          { path: "PANStatus", model: "PanStatusMaster" },
+          { path: "complianceStatus", model: "ComplianceMaster" },
+        ],
+      });
+
     // console.log("Retrieved bill:" , bill);
     console.log("Retrieved bill nature of work:", bill?.natureOfWork);
     if (!bill) {
       return res.status(404).json({ message: "Bill not found" });
     }
     const billObj = bill.toObject();
-    billObj.region = Array.isArray(billObj.region) ? billObj.region.map((r) => r?.name || r) : billObj.region;
+    billObj.region = Array.isArray(billObj.region)
+      ? billObj.region.map((r) => r?.name || r)
+      : billObj.region;
     billObj.currency = billObj.currency?.currency || billObj.currency || null;
     billObj.natureOfWork =
       billObj.natureOfWork?.natureOfWork || billObj.natureOfWork || null;
-    
+
     // Overwrite vendor fields directly from populated vendor
     if (billObj.vendor && typeof billObj.vendor === "object") {
       billObj.vendorNo = billObj.vendor.vendorNo;
       billObj.vendorName = billObj.vendor.vendorName;
       billObj.PAN = billObj.vendor.PAN;
       billObj.GSTNumber = billObj.vendor.GSTNumber;
-      
+
       // Get compliance and PAN status from populated vendor references
-      billObj.compliance206AB = billObj.vendor.complianceStatus?.compliance206AB || 
-                                billObj.vendor.complianceStatus || null;
-      billObj.panStatus = billObj.vendor.PANStatus?.name || 
-                         billObj.vendor.PANStatus || null;
+      billObj.compliance206AB =
+        billObj.vendor.complianceStatus?.compliance206AB ||
+        billObj.vendor.complianceStatus ||
+        null;
+      billObj.panStatus =
+        billObj.vendor.PANStatus?.name || billObj.vendor.PANStatus || null;
     }
     console.log("Bill object vendor:", billObj.vendor);
     // Remove the vendor object itself
@@ -474,7 +491,16 @@ const updateBill = async (req, res) => {
       if (["_id", "createdAt", "updatedAt", "__v"].includes(field)) continue;
       if (field === "srNo" && regenerateSerialNumber) continue;
       // Skip vendor-related fields as they're derived from vendor reference
-      if (["vendorNo", "vendorName", "gstNumber", "panStatus", "compliance206AB"].includes(field)) continue;
+      if (
+        [
+          "vendorNo",
+          "vendorName",
+          "gstNumber",
+          "panStatus",
+          "compliance206AB",
+        ].includes(field)
+      )
+        continue;
       if (field in req.body) {
         updatedData[field] = req.body[field];
       } else if (existingBill[field] !== undefined) {
@@ -738,10 +764,12 @@ const patchBill = async (req, res) => {
     // Validate amount only if being updated (vendor validation is done via vendor reference)
     if (req.body.amount !== undefined) {
       const amount = req.body.amount;
-      if (amount !== null && amount !== undefined && amount !== '') {
+      if (amount !== null && amount !== undefined && amount !== "") {
         const numAmount = Number(amount);
         if (isNaN(numAmount)) {
-          return res.status(400).json({ message: "Amount must be a valid number" });
+          return res
+            .status(400)
+            .json({ message: "Amount must be a valid number" });
         }
       }
     }
@@ -751,17 +779,26 @@ const patchBill = async (req, res) => {
 
     // Uniqueness check for vendor, taxInvNo, taxInvDate, region (ignore self)
     const uniqueQuery = {
-      vendor: req.body.vendor !== undefined ? req.body.vendor : existingBill.vendor,
-      taxInvNo: req.body.taxInvNo !== undefined ? req.body.taxInvNo : existingBill.taxInvNo,
-      taxInvDate: req.body.taxInvDate !== undefined ? req.body.taxInvDate : existingBill.taxInvDate,
-      region: req.body.region !== undefined ? req.body.region : existingBill.region,
-      _id: { $ne: existingBill._id }
+      vendor:
+        req.body.vendor !== undefined ? req.body.vendor : existingBill.vendor,
+      taxInvNo:
+        req.body.taxInvNo !== undefined
+          ? req.body.taxInvNo
+          : existingBill.taxInvNo,
+      taxInvDate:
+        req.body.taxInvDate !== undefined
+          ? req.body.taxInvDate
+          : existingBill.taxInvDate,
+      region:
+        req.body.region !== undefined ? req.body.region : existingBill.region,
+      _id: { $ne: existingBill._id },
     };
     const duplicate = await Bill.findOne(uniqueQuery);
     if (duplicate) {
       return res.status(400).json({
         success: false,
-        message: "A bill with the same vendor, taxInvNo, taxInvDate, and region already exists."
+        message:
+          "A bill with the same vendor, taxInvNo, taxInvDate, and region already exists.",
       });
     }
 
@@ -875,13 +912,15 @@ const filterBills = async (req, res) => {
     // For vendor-based filters, we need to find vendors first and then filter bills
     if (vendorName || vendorNo || gstNumber) {
       const vendorQuery = {};
-      if (vendorName) vendorQuery.vendorName = { $regex: vendorName, $options: "i" };
+      if (vendorName)
+        vendorQuery.vendorName = { $regex: vendorName, $options: "i" };
       if (vendorNo) vendorQuery.vendorNo = { $regex: vendorNo, $options: "i" };
-      if (gstNumber) vendorQuery.GSTNumber = { $regex: gstNumber, $options: "i" };
-      
-      const vendors = await VendorMaster.find(vendorQuery).select('_id');
+      if (gstNumber)
+        vendorQuery.GSTNumber = { $regex: gstNumber, $options: "i" };
+
+      const vendors = await VendorMaster.find(vendorQuery).select("_id");
       if (vendors.length > 0) {
-        query.vendor = { $in: vendors.map(v => v._id) };
+        query.vendor = { $in: vendors.map((v) => v._id) };
       } else {
         // If no vendors match, return empty result
         return res.status(200).json({
@@ -921,24 +960,28 @@ const filterBills = async (req, res) => {
 
     if (currency) query.currency = currency;
     if (poCreated) query.poCreated = poCreated;
-    
+
     // For compliance206AB and panStatus, filter by vendor's compliance/PAN status
     if (compliance206AB || panStatus) {
       const vendorFilterQuery = {};
       if (compliance206AB) vendorFilterQuery.complianceStatus = compliance206AB;
       if (panStatus) vendorFilterQuery.PANStatus = panStatus;
-      
-      const vendorsWithStatus = await VendorMaster.find(vendorFilterQuery).select('_id');
+
+      const vendorsWithStatus = await VendorMaster.find(
+        vendorFilterQuery
+      ).select("_id");
       if (vendorsWithStatus.length > 0) {
         if (query.vendor) {
           // If vendor filter already exists, intersect the results
           const existingVendorIds = query.vendor.$in || [query.vendor];
-          const statusVendorIds = vendorsWithStatus.map(v => v._id);
-          query.vendor = { $in: existingVendorIds.filter(id => 
-            statusVendorIds.some(statusId => statusId.equals(id))
-          )};
+          const statusVendorIds = vendorsWithStatus.map((v) => v._id);
+          query.vendor = {
+            $in: existingVendorIds.filter((id) =>
+              statusVendorIds.some((statusId) => statusId.equals(id))
+            ),
+          };
         } else {
-          query.vendor = { $in: vendorsWithStatus.map(v => v._id) };
+          query.vendor = { $in: vendorsWithStatus.map((v) => v._id) };
         }
       } else {
         // If no vendors match the compliance/PAN status, return empty result
@@ -1101,14 +1144,12 @@ export const getBillsByWorkflowState = async (req, res) => {
     const bills = await Bill.find({
       "workflowState.currentState": state,
     })
-      .select(
-        "srNo amount status workflowState.lastUpdated vendor"
-      )
+      .select("srNo amount status workflowState.lastUpdated vendor")
       .populate("vendor", "vendorName vendorNo")
       .sort({ "workflowState.lastUpdated": -1 });
 
     // Map the results to include vendor fields at top level
-    const mappedBills = bills.map(bill => {
+    const mappedBills = bills.map((bill) => {
       const billObj = bill.toObject();
       if (billObj.vendor) {
         billObj.vendorName = billObj.vendor.vendorName;
@@ -1150,30 +1191,34 @@ export const getBillBySrNo = async (req, res) => {
         path: "vendor",
         populate: [
           { path: "PANStatus", model: "PanStatusMaster" },
-          { path: "complianceStatus", model: "ComplianceMaster" }
-        ]
+          { path: "complianceStatus", model: "ComplianceMaster" },
+        ],
       }); // Populate vendor with nested PAN status and compliance
     if (!bill) {
       return res.status(404).json({ message: "Bill not found" });
     }
     const billObj = bill.toObject();
-    billObj.region = Array.isArray(billObj.region) ? billObj.region.map((r) => r?.name || r) : billObj.region;
+    billObj.region = Array.isArray(billObj.region)
+      ? billObj.region.map((r) => r?.name || r)
+      : billObj.region;
     billObj.currency = billObj.currency?.currency || billObj.currency || null;
     billObj.natureOfWork =
       billObj.natureOfWork?.natureOfWork || billObj.natureOfWork || null;
-    
+
     // Overwrite vendor fields directly from populated vendor
-    if (billObj.vendor && typeof billObj.vendor === 'object') {
+    if (billObj.vendor && typeof billObj.vendor === "object") {
       billObj.vendorNo = billObj.vendor.vendorNo;
       billObj.vendorName = billObj.vendor.vendorName;
       billObj.PAN = billObj.vendor.PAN;
       billObj.GSTNumber = billObj.vendor.GSTNumber;
-      
+
       // Get compliance and PAN status from populated vendor references
-      billObj.compliance206AB = billObj.vendor.complianceStatus?.compliance206AB || 
-                                billObj.vendor.complianceStatus || null;
-      billObj.panStatus = billObj.vendor.PANStatus?.name || 
-                         billObj.vendor.PANStatus || null;
+      billObj.compliance206AB =
+        billObj.vendor.complianceStatus?.compliance206AB ||
+        billObj.vendor.complianceStatus ||
+        null;
+      billObj.panStatus =
+        billObj.vendor.PANStatus?.name || billObj.vendor.PANStatus || null;
     }
     // Remove the vendor object itself
     delete billObj.vendor;
@@ -1251,6 +1296,155 @@ const editPaymentInstructions = async (req, res) => {
   }
 };
 
+const notReceivedPimo = async (req, res) => {
+  try {
+    const { billId, accept } = req.body;
+
+    if (!billId) {
+      return res.status(400).json({
+        success: false,
+        message: "Bill ID is required",
+      });
+    }
+
+    const updateFields = {
+      currentCount: 1,
+      maxCount: 1,
+      siteStatus: accept ? "accept" : "hold",
+      "pimoMumbai.dateGiven": accept ? new Date() : null,
+    };
+
+    if (!accept) {
+      updateFields["pimoMumbai.name"] = null;
+    }
+
+    const billFound = await Bill.findById(billId);
+    if (!billFound) {
+      return res.status(404).json({
+        success: false,
+        message: "Bill not found",
+      });
+    }
+
+    updateFields.maxCount = Math.max(billFound.maxCount, 1);
+
+    const bill = await Bill.findByIdAndUpdate(
+      billId,
+      { $set: updateFields },
+      { new: true }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: accept
+        ? "Bill accepted by PIMO Mumbai"
+        : "Bill put on hold by PIMO Mumbai",
+      bill,
+    });
+  } catch (error) {
+    console.error("Failed to perform the operation:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to perform the operation",
+      error: error.message,
+    });
+  }
+};
+
+const notReceivedAccounts = async (req, res) => {
+  try {
+    const { billId, accept } = req.body;
+
+    if (!billId) {
+      return res.status(400).json({
+        success: false,
+        message: "Bill ID is required",
+      });
+    }
+
+    const updateFields = {
+      currentCount: 3,
+      maxCount: 3,
+      "accountsDept.dateGiven": accept ? new Date() : null,
+    };
+
+    const billFound = await Bill.findById(billId);
+    if (!billFound) {
+      return res.status(404).json({
+        success: false,
+        message: "Bill not found",
+      });
+    }
+
+    updateFields.maxCount = Math.max(billFound.maxCount, 3);
+
+    const bill = await Bill.findByIdAndUpdate(
+      billId,
+      { $set: updateFields },
+      { new: true }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: accept
+        ? "Bill accepted by PIMO Mumbai"
+        : "Bill put on hold by PIMO Mumbai",
+      bill,
+    });
+  } catch (error) {
+    console.error("Failed to perform the operation:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to perform the operation",
+      error: error.message,
+    });
+  }
+};
+
+const accountsPaymentReject = async (req, res) => {
+  try {
+    const { billId } = req.body;
+
+    if (!billId) {
+      return res.status(400).json({
+        success: false,
+        message: "Bill ID is required",
+      });
+    }
+
+    const updateFields = {
+      "accountsDept.paymentDate": null,
+    };
+
+    const billFound = await Bill.findById(billId);
+    if (!billFound) {
+      return res.status(404).json({
+        success: false,
+        message: "Bill not found",
+      });
+    }
+
+    const bill = await Bill.findByIdAndUpdate(
+      billId,
+      { $set: updateFields },
+      { new: true }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Payment rejected by Accounts Department",
+      bill,
+    });
+  } catch (error) {
+    console.error("Failed to perform the operation:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to perform the operation",
+      error: error.message,
+    });
+  }
+};
+
 export default {
   createBill,
   getBill,
@@ -1272,6 +1466,9 @@ export default {
   getBillBySrNo,
   editPaymentInstructions,
   deleteAttachment,
+  notReceivedPimo,
+  notReceivedAccounts,
+  accountsPaymentReject,
 };
 
 // Method to regenerate serial numbers for all bills
