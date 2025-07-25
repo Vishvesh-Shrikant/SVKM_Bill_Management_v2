@@ -102,6 +102,9 @@ const deleteAttachment = async (req, res, next) => {
 
 const createBill = async (req, res) => {
   try {
+    // Get role from query params
+    const { role } = req.query;
+    
     // Accept vendorNo or vendorName from request
     let vendorQuery = {};
     if (req.body.vendorNo) {
@@ -269,10 +272,13 @@ const createBill = async (req, res) => {
         lastUpdated: new Date(),
       },
       attachments,
-      currentCount: 1,
-      maxCount: 1,
+      currentCount: role === "3" ? 3 : 1,
+      maxCount: role === "3" ? 3 : 1,
+      siteStatus: "hold"
     };
     const bill = new Bill(newBillData);
+    await bill.save();
+    bill.pimoMumbai.markReceived = role === "3" ? true : false;
     await bill.save();
     res.status(201).json({ success: true, bill });
   } catch (error) {
