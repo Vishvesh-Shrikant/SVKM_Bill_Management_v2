@@ -118,8 +118,13 @@ export const changeBatchWorkflowState = async (req, res) => {
           .populate("natureOfWork")
           .populate("region")
           .populate("currency")
-          .populate("panStatus")
-          .populate("compliance206AB");
+          .populate({
+            path: "vendor",
+            populate: [
+              { path: "PANStatus", model: "PanStatusMaster" },
+              { path: "complianceStatus", model: "ComplianceMaster" },
+            ],
+          });
 
         if (!billFound) {
           results.failed.push({
