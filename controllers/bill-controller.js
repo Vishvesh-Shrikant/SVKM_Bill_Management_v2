@@ -102,6 +102,9 @@ const deleteAttachment = async (req, res, next) => {
 
 const createBill = async (req, res) => {
   try {
+    // Get role from query params
+    const { role } = req.query;
+    
     // Accept vendorNo or vendorName from request
     let vendorQuery = {};
     if (req.body.vendorNo) {
@@ -269,10 +272,13 @@ const createBill = async (req, res) => {
         lastUpdated: new Date(),
       },
       attachments,
-      currentCount: 1,
-      maxCount: 1,
+      currentCount: role === "3" ? 3 : 1,
+      maxCount: role === "3" ? 3 : 1,
+      siteStatus: "hold"
     };
     const bill = new Bill(newBillData);
+    await bill.save();
+    bill.pimoMumbai.markReceived = role === "3" ? true : false;
     await bill.save();
     res.status(201).json({ success: true, bill });
   } catch (error) {
@@ -355,10 +361,11 @@ const receiveBillByPimoAccounts = async (req, res) => {
 
     if (role)
       switch (role) {
-        case "pimo_mumbai":
+        case "site_pimo":
           updateFields["pimoMumbai.dateReceived"] = now;
           updateFields["pimoMumbai.receivedBy"] = user.name;
           updateFields["pimoMumbai.markReceived"] = true;
+          updateFields["siteStatus"] = "accept";
           break;
 
         case "accounts":
@@ -1298,7 +1305,7 @@ const editPaymentInstructions = async (req, res) => {
 
 const notReceivedPimo = async (req, res) => {
   try {
-    const { billId, accept } = req.body;
+    const { billId } = req.body;
 
     if (!billId) {
       return res.status(400).json({
@@ -1310,13 +1317,10 @@ const notReceivedPimo = async (req, res) => {
     const updateFields = {
       currentCount: 1,
       maxCount: 1,
-      siteStatus: accept ? "accept" : "hold",
-      "pimoMumbai.dateGiven": accept ? new Date() : null,
+      siteStatus: "hold",
+      "pimoMumbai.dateGiven": null,
+      "pimoMumbai.namePIMO": null || "",
     };
-
-    if (!accept) {
-      updateFields["pimoMumbai.name"] = null;
-    }
 
     const billFound = await Bill.findById(billId);
     if (!billFound) {
@@ -1336,9 +1340,7 @@ const notReceivedPimo = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: accept
-        ? "Bill accepted by PIMO Mumbai"
-        : "Bill put on hold by PIMO Mumbai",
+      message: "Bill put on hold by PIMO Mumbai",
       bill,
     });
   } catch (error) {
@@ -1353,7 +1355,7 @@ const notReceivedPimo = async (req, res) => {
 
 const notReceivedAccounts = async (req, res) => {
   try {
-    const { billId, accept } = req.body;
+    const { billId } = req.body;
 
     if (!billId) {
       return res.status(400).json({
@@ -1365,7 +1367,7 @@ const notReceivedAccounts = async (req, res) => {
     const updateFields = {
       currentCount: 3,
       maxCount: 3,
-      "accountsDept.dateGiven": accept ? new Date() : null,
+      "accountsDept.dateGiven": null,
     };
 
     const billFound = await Bill.findById(billId);
@@ -1386,9 +1388,7 @@ const notReceivedAccounts = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: accept
-        ? "Bill accepted by PIMO Mumbai"
-        : "Bill put on hold by PIMO Mumbai",
+      message: "Bill put on hold by Accounts Department",
       bill,
     });
   } catch (error) {

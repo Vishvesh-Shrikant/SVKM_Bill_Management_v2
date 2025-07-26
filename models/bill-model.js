@@ -115,9 +115,9 @@ const billSchema = new mongoose.Schema(
     taxInvNo: { type: String },
     taxInvDate: { type: Date },
     taxInvAmt: { type: Number },
-    taxInvRecdAtSite: { type: Date, required: true },
-    taxInvRecdBy: { type: String, required: true },
-    department: { type: String, required: true },
+    taxInvRecdAtSite: { type: Date },
+    taxInvRecdBy: { type: String },
+    department: { type: String },
     remarksBySiteTeam: { type: String },
     attachment: { type: String },
     attachmentType: {
@@ -188,7 +188,7 @@ const billSchema = new mongoose.Schema(
     },
     siteStatus: {
       type: String,
-      enum: ["accept", "reject", "hold", "issue"],
+      enum: ["accept", "reject", "hold"],
       required: true,
     },
     //2 api req-pimo (date given no date recieved), main pimo(both)
