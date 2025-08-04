@@ -13,6 +13,7 @@ import User from "../models/user-model.js";
 import { s3Delete, s3Upload } from "../utils/s3.js";
 import mongoose from "mongoose";
 
+
 // Validation function for amount only (vendor validation is now handled via vendor reference)
 const validateAmount = (amount) => {
   // Validate amount - should be a valid number if provided
@@ -104,7 +105,8 @@ const createBill = async (req, res) => {
   try {
     // Get role from query params
     const { role } = req.query;
-    
+ 
+    const typeofinv=req.body.typeOfInv;
     // Accept vendorNo or vendorName from request
     let vendorQuery = {};
     if (req.body.vendorNo) {
@@ -248,7 +250,14 @@ const createBill = async (req, res) => {
       billData[field] = req.body[field] !== undefined ? req.body[field] : null;
     }
 
-    // Uniqueness check for vendor, taxInvNo, taxInvDate, region
+    // Uniqueness check for vendor, taxInvNo, taxInvDate, region only for specific type of invoice
+    console.log("Type of invoice is : ",typeofinv);
+    if (
+  typeofinv != "Advance/LC/BG" &&
+  typeofinv != "Direct FI Entry" &&
+  typeofinv != "Proforma Invoice"
+  ) {
+    
     const uniqueQuery = {
       vendor: vendorDoc._id, // Use vendor ObjectId instead of vendorNo
       taxInvNo: req.body.taxInvNo,
@@ -263,6 +272,7 @@ const createBill = async (req, res) => {
           "A bill with the same vendorNo, taxInvNo, taxInvDate, and region already exists.",
       });
     }
+  }
 
     const newBillData = {
       ...billData,
