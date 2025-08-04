@@ -115,7 +115,7 @@ const billSchema = new mongoose.Schema(
     taxInvNo: { type: String },
     taxInvDate: { type: Date },
     taxInvAmt: { type: Number },
-    taxInvRecdAtSite: { type: Date },
+    taxInvRecdAtSite: { type: Date, required: true },
     taxInvRecdBy: { type: String },
     department: { type: String },
     remarksBySiteTeam: { type: String },

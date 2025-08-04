@@ -4,8 +4,8 @@ const vendorMasterSchema = new mongoose.Schema(
   {
     vendorNo: { type: Number, unique: true, required: true },
     vendorName: { type: String, required: true },
-    PAN: { type: String, required: true },
-    GSTNumber: { type: String, required: true },
+    PAN: { type: String },
+    GSTNumber: { type: String},
     complianceStatus: { 
       type: mongoose.Schema.Types.ObjectId, 
       ref: 'ComplianceMaster', 
