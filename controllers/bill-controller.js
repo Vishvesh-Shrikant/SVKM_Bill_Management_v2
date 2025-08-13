@@ -670,6 +670,39 @@ const patchBill = async (req, res) => {
     // Track fields that we've processed to avoid duplicates
     const processedFields = new Set();
 
+    // check if vendorNo, vendor objectId, or vendorName is provided, considered all three cases, find the vendor and update updates.vendor field
+    // able to update vendor details after creating the bill
+    if (req.body.vendorNo || req.body.vendorName || req.body.vendor) {
+      if (req.body.vendor && mongoose.Types.ObjectId.isValid(req.body.vendor)) {
+        const vendorDoc = await VendorMaster.findById(req.body.vendor);
+        if (!vendorDoc) {
+          return res.status(404).json({ 
+            success: false,
+            message: "Vendor not found" 
+          });
+        }
+        updates.vendor = vendorDoc._id;
+      } else if (req.body.vendorNo || req.body.vendorName) {
+        let vendorQuery = {};
+        if (req.body.vendorNo) {
+          vendorQuery.vendorNo = req.body.vendorNo;
+        } else if (req.body.vendorName) {
+          vendorQuery.vendorName = req.body.vendorName;
+        }
+        const vendorDoc = await VendorMaster.findOne(vendorQuery);
+        if (!vendorDoc) {
+          return res.status(404).json({ 
+            success: false,
+            message: "Vendor not found" 
+          });
+        }
+        updates.vendor = vendorDoc._id;
+      }
+      processedFields.add("vendor");
+      processedFields.add("vendorNo");
+      processedFields.add("vendorName");
+    }
+
     // Process top-level fields
     for (const field of Object.keys(req.body)) {
       // Skip fields we'll handle specially
@@ -795,28 +828,37 @@ const patchBill = async (req, res) => {
     existingBill.setImportMode(true);
 
     // Uniqueness check for vendor, taxInvNo, taxInvDate, region (ignore self)
-    const uniqueQuery = {
-      vendor:
-        req.body.vendor !== undefined ? req.body.vendor : existingBill.vendor,
-      taxInvNo:
-        req.body.taxInvNo !== undefined
-          ? req.body.taxInvNo
-          : existingBill.taxInvNo,
-      taxInvDate:
-        req.body.taxInvDate !== undefined
-          ? req.body.taxInvDate
-          : existingBill.taxInvDate,
-      region:
-        req.body.region !== undefined ? req.body.region : existingBill.region,
-      _id: { $ne: existingBill._id },
-    };
-    const duplicate = await Bill.findOne(uniqueQuery);
-    if (duplicate) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "A bill with the same vendor, taxInvNo, taxInvDate, and region already exists.",
-      });
+    // Only check uniqueness for certain types of invoices
+    const typeOfInv = req.body.typeOfInv !== undefined ? req.body.typeOfInv : existingBill.typeOfInv;
+    
+    if (
+      typeOfInv != "Advance/LC/BG" &&
+      typeOfInv != "Direct FI Entry" &&
+      typeOfInv != "Proforma Invoice"
+    ) {
+      const uniqueQuery = {
+        vendor:
+          updates.vendor !== undefined ? updates.vendor : existingBill.vendor,
+        taxInvNo:
+          req.body.taxInvNo !== undefined
+            ? req.body.taxInvNo
+            : existingBill.taxInvNo,
+        taxInvDate:
+          req.body.taxInvDate !== undefined
+            ? req.body.taxInvDate
+            : existingBill.taxInvDate,
+        region:
+          req.body.region !== undefined ? req.body.region : existingBill.region,
+        _id: { $ne: existingBill._id },
+      };
+      const duplicate = await Bill.findOne(uniqueQuery);
+      if (duplicate) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "A bill with the same vendor, taxInvNo, taxInvDate, and region already exists.",
+        });
+      }
     }
 
     // Only update the bill if there are changes
@@ -835,12 +877,49 @@ const patchBill = async (req, res) => {
       existingBill._id,
       { $set: updates },
       { new: true, runValidators: false }
-    );
+    )
+      .populate("region")
+      .populate("currency")
+      .populate("natureOfWork")
+      .populate({
+        path: "vendor",
+        populate: [
+          { path: "PANStatus", model: "PanStatusMaster" },
+          { path: "complianceStatus", model: "ComplianceMaster" },
+        ],
+      });
+
+    // Format the response similar to getBill
+    const billObj = updatedBill.toObject();
+    billObj.region = Array.isArray(billObj.region)
+      ? billObj.region.map((r) => r?.name || r)
+      : billObj.region;
+    billObj.currency = billObj.currency?.currency || billObj.currency || null;
+    billObj.natureOfWork =
+      billObj.natureOfWork?.natureOfWork || billObj.natureOfWork || null;
+
+    // Overwrite vendor fields directly from populated vendor
+    if (billObj.vendor && typeof billObj.vendor === "object") {
+      billObj.vendorNo = billObj.vendor.vendorNo;
+      billObj.vendorName = billObj.vendor.vendorName;
+      billObj.PAN = billObj.vendor.PAN;
+      billObj.GSTNumber = billObj.vendor.GSTNumber;
+
+      // Get compliance and PAN status from populated vendor references
+      billObj.compliance206AB =
+        billObj.vendor.complianceStatus?.compliance206AB ||
+        billObj.vendor.complianceStatus ||
+        null;
+      billObj.panStatus =
+        billObj.vendor.PANStatus?.name || billObj.vendor.PANStatus || null;
+    }
+    // Remove the vendor object itself
+    delete billObj.vendor;
 
     return res.status(200).json({
       success: true,
       message: "Bill updated successfully",
-      data: updatedBill,
+      data: billObj,
     });
   } catch (error) {
     console.error("Error patching bill:", error);
