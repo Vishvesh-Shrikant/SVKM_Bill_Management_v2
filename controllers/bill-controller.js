@@ -13,7 +13,6 @@ import User from "../models/user-model.js";
 import { s3Delete, s3Upload } from "../utils/s3.js";
 import mongoose from "mongoose";
 
-
 // Validation function for amount only (vendor validation is now handled via vendor reference)
 const validateAmount = (amount) => {
   // Validate amount - should be a valid number if provided
@@ -261,9 +260,21 @@ const createBill = async (req, res) => {
     const uniqueQuery = {
       vendor: vendorDoc._id, // Use vendor ObjectId instead of vendorNo
       taxInvNo: req.body.taxInvNo,
-      taxInvDate: req.body.taxInvDate,
       region: req.body.region,
     };
+    
+    // For date comparison, use date range to match same day regardless of time
+    if (req.body.taxInvDate) {
+      const inputDate = new Date(req.body.taxInvDate);
+      const startOfDay = new Date(inputDate.getFullYear(), inputDate.getMonth(), inputDate.getDate(), 0, 0, 0);
+      const endOfDay = new Date(inputDate.getFullYear(), inputDate.getMonth(), inputDate.getDate(), 23, 59, 59, 999);
+      
+      uniqueQuery.taxInvDate = {
+        $gte: startOfDay,
+        $lte: endOfDay
+      };
+    }
+    
     const duplicate = await Bill.findOne(uniqueQuery);
     if (duplicate) {
       return res.status(400).json({
@@ -670,7 +681,7 @@ const patchBill = async (req, res) => {
     // Track fields that we've processed to avoid duplicates
     const processedFields = new Set();
 
-    // check if vendorNo, vendor objectId, or vendorName is provided, considered all three cases, find the vendor and update updates.vendor field
+     // check if vendorNo, vendor objectId, or vendorName is provided, considered all three cases, find the vendor and update updates.vendor field
     // able to update vendor details after creating the bill
     if (req.body.vendorNo || req.body.vendorName || req.body.vendor) {
       if (req.body.vendor && mongoose.Types.ObjectId.isValid(req.body.vendor)) {
@@ -827,8 +838,7 @@ const patchBill = async (req, res) => {
     // Set import mode to avoid validation errors
     existingBill.setImportMode(true);
 
-    // Uniqueness check for vendor, taxInvNo, taxInvDate, region (ignore self)
-    // Only check uniqueness for certain types of invoices
+     // Only check uniqueness for certain types of invoices
     const typeOfInv = req.body.typeOfInv !== undefined ? req.body.typeOfInv : existingBill.typeOfInv;
     
     if (
@@ -836,29 +846,40 @@ const patchBill = async (req, res) => {
       typeOfInv != "Direct FI Entry" &&
       typeOfInv != "Proforma Invoice"
     ) {
-      const uniqueQuery = {
-        vendor:
-          updates.vendor !== undefined ? updates.vendor : existingBill.vendor,
-        taxInvNo:
-          req.body.taxInvNo !== undefined
-            ? req.body.taxInvNo
-            : existingBill.taxInvNo,
-        taxInvDate:
-          req.body.taxInvDate !== undefined
-            ? req.body.taxInvDate
-            : existingBill.taxInvDate,
-        region:
-          req.body.region !== undefined ? req.body.region : existingBill.region,
-        _id: { $ne: existingBill._id },
+    // Uniqueness check for vendor, taxInvNo, taxInvDate, region (ignore self)
+    const uniqueQuery = {
+      vendor:
+        updates.vendor !== undefined ? updates.vendor : existingBill.vendor,
+      taxInvNo:
+        req.body.taxInvNo !== undefined
+          ? req.body.taxInvNo
+          : existingBill.taxInvNo,
+      region:
+        req.body.region !== undefined ? req.body.region : existingBill.region,
+      _id: { $ne: existingBill._id },
+    };
+  }
+    
+    // For date comparison, use date range to match same day regardless of time
+    const taxInvDate = req.body.taxInvDate !== undefined ? req.body.taxInvDate : existingBill.taxInvDate;
+    if (taxInvDate) {
+      const inputDate = new Date(taxInvDate);
+      const startOfDay = new Date(inputDate.getFullYear(), inputDate.getMonth(), inputDate.getDate(), 0, 0, 0);
+      const endOfDay = new Date(inputDate.getFullYear(), inputDate.getMonth(), inputDate.getDate(), 23, 59, 59, 999);
+      
+      uniqueQuery.taxInvDate = {
+        $gte: startOfDay,
+        $lte: endOfDay
       };
-      const duplicate = await Bill.findOne(uniqueQuery);
-      if (duplicate) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "A bill with the same vendor, taxInvNo, taxInvDate, and region already exists.",
-        });
-      }
+    }
+    
+    const duplicate = await Bill.findOne(uniqueQuery);
+    if (duplicate) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "A bill with the same vendor, taxInvNo, taxInvDate, and region already exists.",
+      });
     }
 
     // Only update the bill if there are changes
@@ -915,6 +936,7 @@ const patchBill = async (req, res) => {
     }
     // Remove the vendor object itself
     delete billObj.vendor;
+
 
     return res.status(200).json({
       success: true,
@@ -1687,3 +1709,4 @@ export default {
 //     bill,
 //   });
 // };
+

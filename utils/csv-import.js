@@ -1,3 +1,16 @@
+// Recursively sanitize all amount fields in an object
+function sanitizeAmounts(obj) {
+  if (!obj || typeof obj !== 'object') return;
+  for (const key of Object.keys(obj)) {
+    const value = obj[key];
+    if (typeof value === 'object' && value !== null) {
+      sanitizeAmounts(value);
+    } else if ((key.toLowerCase().includes('amt') || key.toLowerCase().includes('amount')) && typeof value === 'string') {
+      const num = parseFloat(value.replace(/,/g, ''));
+      obj[key] = isNaN(num) ? 0 : num;
+    }
+  }
+}
 import ExcelJS from 'exceljs';
 import Bill from "../models/bill-model.js";
 import mongoose from "mongoose";
@@ -81,9 +94,18 @@ export const importBillsFromExcel = async (filePath, validVendorNos = [], patchO
             value = value.text || value.result || value.toString();
           }
           
-          // Convert dates
+          // Convert dates and normalize them to start of day
           if (fieldName?.toLowerCase().includes('date') && value) {
             value = parseDate(value);
+            // Normalize date to start of day to ensure consistent storage
+            if (value instanceof Date && !isNaN(value.getTime())) {
+              value = new Date(value.getFullYear(), value.getMonth(), value.getDate(), 0, 0, 0, 0);
+            }
+          }
+          // Sanitize amount fields (remove commas, parse as float)
+          if (fieldName?.toLowerCase().includes('amt') && typeof value === 'string') {
+            value = parseFloat(value.replace(/,/g, ''));
+            if (isNaN(value)) value = 0;
           }
           
           // Store srNo for duplicate check
@@ -105,7 +127,10 @@ export const importBillsFromExcel = async (filePath, validVendorNos = [], patchO
           }
         });
         
-        if (!srNo) continue;
+  if (!srNo) continue;
+
+  // Recursively sanitize all amount fields (including nested)
+  sanitizeAmounts(billData);
         
         // Debug: Show extracted data for this row
         console.log(`Row ${rowNumber} data:`, {
@@ -129,17 +154,26 @@ export const importBillsFromExcel = async (filePath, validVendorNos = [], patchO
           // Add non-empty fields to the query
           if (billData.vendorNo) uniquenessQuery.vendorNo = billData.vendorNo;
           if (billData.taxInvNo) uniquenessQuery.taxInvNo = billData.taxInvNo;
-          if (billData.taxInvDate) uniquenessQuery.taxInvDate = billData.taxInvDate;
           if (billData.region) uniquenessQuery.region = billData.region;
+          
+          // For date comparison, use date range to match same day regardless of time
+          if (billData.taxInvDate) {
+            const inputDate = new Date(billData.taxInvDate);
+            const startOfDay = new Date(inputDate.getFullYear(), inputDate.getMonth(), inputDate.getDate(), 0, 0, 0);
+            const endOfDay = new Date(inputDate.getFullYear(), inputDate.getMonth(), inputDate.getDate(), 23, 59, 59, 999);
+            
+            uniquenessQuery.taxInvDate = {
+              $gte: startOfDay,
+              $lte: endOfDay
+            };
+          }
           
           // Only check if we have at least 2 fields for meaningful uniqueness
           if (Object.keys(uniquenessQuery).length >= 2) {
             console.log(`Checking uniqueness for row ${rowNumber} with:`, uniquenessQuery);
             duplicateByUniqueness = await Bill.findOne(uniquenessQuery).lean();
             
-            if (duplicateByUniqueness) {
-              console.log(`Found duplicate by uniqueness for row ${rowNumber}:`, duplicateByUniqueness._id);
-            }
+ 
           }
         }
         
@@ -279,7 +313,7 @@ export const importBillsFromExcel = async (filePath, validVendorNos = [], patchO
         results.errors.push({
           row: rowNumber,
           error: errorMessage,
-          srNo: srNo
+          srNo: (typeof srNo !== 'undefined' ? srNo : null)
         });
       }
     }
