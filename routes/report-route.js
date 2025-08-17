@@ -68,7 +68,7 @@ router.get(
 );
 //gets all invoices at QS Mumbai for COP
 router.get(
-  "invoices-received-at-qsmeasurement",
+  "invoices-received-at-qsmumbai",
   authorize(["qs_site", "qs_mumbai", "pimo_mumbai", "admin"]),
   getInvoicesAtQSMumbai
 );
@@ -93,7 +93,7 @@ router.get(
 );
 //get all invoices returned by QS Mumbai
 router.get(
-  "/invoices-returned-by-qsmeasurement",
+  "/invoices-returned-by-qsmumbai",
   authorize(["qs_site", "qs_mumbai", "admin"]),
   getInvoicesReturnedByQSMumbai
 );
