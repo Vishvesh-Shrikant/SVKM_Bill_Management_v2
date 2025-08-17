@@ -225,6 +225,7 @@ const billSchema = new mongoose.Schema(
       dateGiven: { type: Date },
       doneBy: { type: String },
       name: { type: String },
+      date: { type: Date },
     },
     approvalDetails: {
       directorApproval: {

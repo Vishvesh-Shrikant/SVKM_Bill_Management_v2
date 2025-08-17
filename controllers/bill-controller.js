@@ -295,8 +295,8 @@ const createBill = async (req, res) => {
       attachments,
       currentCount: role === "3" ? 3 : 1,
       maxCount: role === "3" ? 3 : 1,
-      siteStatus: "hold"
-    };
+      siteStatus: role === "3" ? "accept" : "hold",
+    };  
     const bill = new Bill(newBillData);
     await bill.save();
     bill.pimoMumbai.markReceived = role === "3" ? true : false;

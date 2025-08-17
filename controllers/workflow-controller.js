@@ -227,7 +227,7 @@ export const changeBatchWorkflowState = async (req, res) => {
               `Forwarding bill ${billId} to MIGO ENtry from Site Officer`
             );
             setObj["migoDetails.dateGiven"] = now;
-            setObj["migoDetails.doneBy"] = toName ? toName : "";
+            // setObj["migoDetails.doneBy"] = toName ? toName : "";
           } else if (toRoleArray.includes("migo_entry_return")) {
             console.log(
               `Forwarding bill ${billId} to MIGO ENtry from Site Officeraa`
