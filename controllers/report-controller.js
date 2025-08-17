@@ -464,10 +464,12 @@ export const getInvoicesCourierToPIMOMumbai = async (req, res) => {
       (sum, item) => sum + (Number(item.taxInvAmt) || 0),
       0
     );
+    let count = reportData.length;
     reportData.push({
       isGrandTotal: true,
       grandTotalLabel: "Grand Total",
       grandTotalTaxAmount: totalTaxInvAmt,
+      count,
     });
     // Prepare the final response
     const response = {
@@ -480,7 +482,6 @@ export const getInvoicesCourierToPIMOMumbai = async (req, res) => {
           sorting: ["vendorName", "courierDate"],
         },
         data: reportData,
-        count: reportData.length - 1,
       },
     };
 
@@ -552,10 +553,12 @@ export const getInvoicesGivenToAcctsDept = async (req, res) => {
       (sum, item) => sum + (Number(item.taxInvAmt) || 0),
       0
     );
+    let count = reportData.length;
     reportData.push({
       isGrandTotal: true,
       grandTotalLabel: "Grand Total",
       grandTotalTaxAmount: totalTaxInvAmt,
+      count,
     });
     const response = {
       report: {
@@ -567,7 +570,6 @@ export const getInvoicesGivenToAcctsDept = async (req, res) => {
           sorting: ["vendorName", "dateGivenToAccounts"],
         },
         data: reportData,
-        count: reportData.length - 1,
       },
     };
 
@@ -656,12 +658,14 @@ export const getInvoicesPaid = async (req, res) => {
       (sum, item) => sum + (Number(item.paymentAmt) || 0),
       0
     );
+    let count = reportData.length;
     reportData.push({
       isGrandTotal: true,
       grandTotalLabel: "Grand Total",
       grandTotalTaxAmount: totalTaxInvAmt,
       grandTotalCopAmt: totalCopAmt,
       grandTotalAmount: totalPaymentAmt,
+      count,
     });
     const response = {
       report: {
@@ -677,7 +681,6 @@ export const getInvoicesPaid = async (req, res) => {
         sortingCriteria: ["Date of Payment"],
         filterLogic: "Dt of payment should be filled (Column 89)",
         data: reportData,
-        count: reportData.length - 1,
       },
     };
 
@@ -1017,10 +1020,12 @@ export const getInvoicesReturnedByQsSite = async (req, res) => {
       (sum, item) => sum + (Number(item.taxInvAmt) || 0),
       0
     );
+    let count = reportData.length;
     reportData.push({
       isGrandTotal: true,
       grandTotalLabel: "Grand Total",
       grandTotalTaxAmount: totalTaxInvAmt,
+      count,
     });
     // Prepare the final response
     const response = {
@@ -1032,7 +1037,6 @@ export const getInvoicesReturnedByQsSite = async (req, res) => {
           sorting: ["returnDate"],
         },
         data: reportData,
-        count: reportData.length - 1,
       },
     };
 
@@ -1108,10 +1112,12 @@ export const getInvoicesReturnedByQsCOP = async (req, res) => {
       (sum, item) => sum + (Number(item.taxInvAmt) || 0),
       0
     );
+    let count = reportData.length;
     reportData.push({
       isGrandTotal: true,
       grandTotalLabel: "Grand Total",
       grandTotalTaxAmount: totalTaxInvAmt,
+      count,
     });
     // Prepare the final response
     const response = {
@@ -1123,7 +1129,6 @@ export const getInvoicesReturnedByQsCOP = async (req, res) => {
           sorting: ["returnDate"],
         },
         data: reportData,
-        count: reportData.length - 1,
       },
     };
 
@@ -1200,10 +1205,12 @@ export const getInvoicesReturnedByQSMumbai = async (req, res) => {
       (sum, item) => sum + (Number(item.taxInvAmt) || 0),
       0
     );
+    let count = reportData.length;
     reportData.push({
       isGrandTotal: true,
       grandTotalLabel: "Grand Total",
       grandTotalTaxAmount: totalTaxInvAmt,
+      count,
     });
     // Prepare the final response
     const response = {
@@ -1215,7 +1222,6 @@ export const getInvoicesReturnedByQSMumbai = async (req, res) => {
           sorting: ["returnDate"],
         },
         data: reportData,
-        count: reportData.length - 1,
       },
     };
 
