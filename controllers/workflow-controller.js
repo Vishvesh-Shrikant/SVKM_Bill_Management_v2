@@ -505,6 +505,24 @@ export const changeBatchWorkflowState = async (req, res) => {
               new: true,
             }
           );
+        } else if (
+          fromRoleArray.includes("accounts") && 
+          toRoleArray.includes("booking_checking")
+        ) {
+          console.log(` bill ${billId} to Booking & Checking from Accounts`);
+          billWorkflow = await Bill.findByIdAndUpdate(
+            billId,
+            {
+              $set: {
+                currentCount: 5,
+                maxCount: Math.max(billFound.maxCount, 5),
+                "accountsDept.invBookingChecking": now,
+              },
+            },
+            {
+              new: true,
+            }
+          );
         }
 
         /////////////////////////////////////

@@ -1431,6 +1431,9 @@ const notReceivedPimo = async (req, res) => {
       siteStatus: "hold",
       "pimoMumbai.dateGiven": null,
       "pimoMumbai.namePIMO": null || "",
+      "pimoMumbai.dateReceived": null,
+      "pimoMumbai.receivedBy": null || "",
+      "pimoMumbai.markReceived": null || false,
     };
 
     const billFound = await Bill.findById(billId);
@@ -1479,6 +1482,9 @@ const notReceivedAccounts = async (req, res) => {
       currentCount: 3,
       maxCount: 3,
       "accountsDept.dateGiven": null,
+      "accountsDept.dateReceived": null,
+      "accountsDept.receivedBy": null || "",
+      "accountsDept.markReceived": null || false,
     };
 
     const billFound = await Bill.findById(billId);
