@@ -279,7 +279,9 @@ export const getInvoicesReceivedAtSite = async (req, res) => {
       (sum, item) => sum + (Number(item.taxInvAmt) || 0),
       0
     );
+    let count = reportData.length;
     reportData.push({
+      count,
       isGrandTotal: true,
       grandTotalLabel: "Grand Total",
       grandTotalTaxAmount: totalTaxInvAmt,
@@ -371,7 +373,9 @@ export const getInvoicesReceivedAtPIMOMumbai = async (req, res) => {
       (sum, item) => sum + (Number(item.taxInvAmt) || 0),
       0
     );
+    let count = reportData.length;
     reportData.push({
+      count,
       isGrandTotal: true,
       grandTotalLabel: "Grand Total",
       grandTotalTaxAmount: totalTaxInvAmt,
@@ -755,7 +759,9 @@ export const getInvoicesGivenToQsSite = async (req, res) => {
       (sum, item) => sum + (Number(item.taxInvAmt) || 0),
       0
     );
+    let count = reportData.length;
     reportData.push({
+      count,
       isGrandTotal: true,
       grandTotalLabel: "Grand Total",
       grandTotalTaxAmount: totalTaxInvAmt,
@@ -843,7 +849,9 @@ export const getInvoicesAtQSforProvCOP = async (req, res) => {
       (sum, item) => sum + (Number(item.taxInvAmt) || 0),
       0
     );
+    let count = reportData.length;
     reportData.push({
+      count,
       isGrandTotal: true,
       grandTotalLabel: "Grand Total",
       grandTotalTaxAmount: totalTaxInvAmt,
@@ -930,7 +938,9 @@ export const getInvoicesAtQSMumbai = async (req, res) => {
       (sum, item) => sum + (Number(item.taxInvAmt) || 0),
       0
     );
+    let count = reportData.length;
     reportData.push({
+      count,
       isGrandTotal: true,
       grandTotalLabel: "Grand Total",
       grandTotalTaxAmount: totalTaxInvAmt,
