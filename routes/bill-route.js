@@ -19,6 +19,7 @@ router.post(
   billController.createBill
 );
 router.get("/", authMiddleware, billController.getBills);
+router.get("/get-filtered-bills", billController.getFilteredBills);
 router.get("/:id", billController.getBill);
 router.get("/srno/:srNo", billController.getBillBySrNo); // Get bill by srNo (7 digits)
 router.put(

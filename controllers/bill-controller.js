@@ -840,14 +840,14 @@ const patchBill = async (req, res) => {
 
      // Only check uniqueness for certain types of invoices
     const typeOfInv = req.body.typeOfInv !== undefined ? req.body.typeOfInv : existingBill.typeOfInv;
-    
+    let uniqueQuery = {};
     if (
       typeOfInv != "Advance/LC/BG" &&
       typeOfInv != "Direct FI Entry" &&
       typeOfInv != "Proforma Invoice"
     ) {
     // Uniqueness check for vendor, taxInvNo, taxInvDate, region (ignore self)
-    const uniqueQuery = {
+    uniqueQuery = {
       vendor:
         updates.vendor !== undefined ? updates.vendor : existingBill.vendor,
       taxInvNo:
@@ -1562,6 +1562,105 @@ const accountsPaymentReject = async (req, res) => {
   }
 };
 
+const getFilteredBills = async (req, res) => {
+  const { role } = req.query;
+  try {
+    console.log("Hii");
+    let filter = { region: { $in: req.user.region } };
+
+    switch (role) {
+      case "site_officer":
+        filter = {
+          ...filter,
+          "pimoMumbai.dateReceived": null,
+          siteStatus: "hold"
+        };
+        break;
+      
+      case "site_pimo":
+        filter = {
+          ...filter,
+          $or: [
+            {
+              "pimoMumbai.dateGiven": { $ne: null },
+              "accountsDept.dateReceived": null
+            },
+            {
+              siteStatus: "accept",
+              "accountsDept.dateReceived": null
+            }
+          ]
+        };
+        break;
+
+      case "accounts":
+        filter = {
+          ...filter,
+          "accountsDept.paymentDate": null,
+          "accountsDept.dateGiven": { $ne: null },
+          currentCount: 5
+        };
+        break;
+
+      case "director":
+        filter = {
+          ...filter,
+          siteStatus: { $in: ["accept", "hold"] },
+          "accountsDept.status": "Unpaid"
+        };
+        break;
+
+      case "qs_site":
+        filter = {
+          ...filter,
+          currentCount: 2
+        };
+        break;
+    }
+
+    const bills = await Bill.find(filter)
+      .populate("region")
+      .populate("currency")
+      .populate("natureOfWork")
+      .populate({
+        path: "vendor",
+        populate: [
+          { path: "PANStatus", model: "PanStatusMaster" },
+          { path: "complianceStatus", model: "ComplianceMaster" },
+        ],
+      });
+
+    const mappedBills = bills.map((bill) => {
+      const billObj = bill.toObject();
+      billObj.region = Array.isArray(billObj.region)
+        ? billObj.region.map((r) => r?.name || r)
+        : billObj.region;
+      billObj.currency = billObj.currency?.currency || billObj.currency || null;
+      billObj.natureOfWork =
+        billObj.natureOfWork?.natureOfWork || billObj.natureOfWork || null;
+
+      if (billObj.vendor && typeof billObj.vendor === "object") {
+        billObj.vendorNo = billObj.vendor.vendorNo;
+        billObj.vendorName = billObj.vendor.vendorName;
+        billObj.PAN = billObj.vendor.PAN;
+        billObj.gstNumber = billObj.vendor.GSTNumber;
+
+        billObj.compliance206AB =
+          billObj.vendor.complianceStatus?.compliance206AB ||
+          billObj.vendor.complianceStatus ||
+          null;
+        billObj.panStatus =
+          billObj.vendor.PANStatus?.name || billObj.vendor.PANStatus || null;
+      }
+      delete billObj.vendor;
+      return billObj;
+    });
+    res.status(200).json(mappedBills);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
 export default {
   createBill,
   getBill,
@@ -1586,6 +1685,7 @@ export default {
   notReceivedPimo,
   notReceivedAccounts,
   accountsPaymentReject,
+  getFilteredBills,
 };
 
 // Method to regenerate serial numbers for all bills
