@@ -13,7 +13,6 @@ import User from "../models/user-model.js";
 import { s3Delete, s3Upload } from "../utils/s3.js";
 import mongoose from "mongoose";
 
-
 // Validation function for amount only (vendor validation is now handled via vendor reference)
 const validateAmount = (amount) => {
   // Validate amount - should be a valid number if provided
@@ -261,9 +260,21 @@ const createBill = async (req, res) => {
     const uniqueQuery = {
       vendor: vendorDoc._id, // Use vendor ObjectId instead of vendorNo
       taxInvNo: req.body.taxInvNo,
-      taxInvDate: req.body.taxInvDate,
       region: req.body.region,
     };
+    
+    // For date comparison, use date range to match same day regardless of time
+    if (req.body.taxInvDate) {
+      const inputDate = new Date(req.body.taxInvDate);
+      const startOfDay = new Date(inputDate.getFullYear(), inputDate.getMonth(), inputDate.getDate(), 0, 0, 0);
+      const endOfDay = new Date(inputDate.getFullYear(), inputDate.getMonth(), inputDate.getDate(), 23, 59, 59, 999);
+      
+      uniqueQuery.taxInvDate = {
+        $gte: startOfDay,
+        $lte: endOfDay
+      };
+    }
+    
     const duplicate = await Bill.findOne(uniqueQuery);
     if (duplicate) {
       return res.status(400).json({
@@ -284,8 +295,8 @@ const createBill = async (req, res) => {
       attachments,
       currentCount: role === "3" ? 3 : 1,
       maxCount: role === "3" ? 3 : 1,
-      siteStatus: "hold"
-    };
+      siteStatus: role === "3" ? "accept" : "hold",
+    };  
     const bill = new Bill(newBillData);
     await bill.save();
     bill.pimoMumbai.markReceived = role === "3" ? true : false;
@@ -670,7 +681,7 @@ const patchBill = async (req, res) => {
     // Track fields that we've processed to avoid duplicates
     const processedFields = new Set();
 
-    // check if vendorNo, vendor objectId, or vendorName is provided, considered all three cases, find the vendor and update updates.vendor field
+     // check if vendorNo, vendor objectId, or vendorName is provided, considered all three cases, find the vendor and update updates.vendor field
     // able to update vendor details after creating the bill
     if (req.body.vendorNo || req.body.vendorName || req.body.vendor) {
       if (req.body.vendor && mongoose.Types.ObjectId.isValid(req.body.vendor)) {
@@ -827,38 +838,48 @@ const patchBill = async (req, res) => {
     // Set import mode to avoid validation errors
     existingBill.setImportMode(true);
 
-    // Uniqueness check for vendor, taxInvNo, taxInvDate, region (ignore self)
-    // Only check uniqueness for certain types of invoices
+     // Only check uniqueness for certain types of invoices
     const typeOfInv = req.body.typeOfInv !== undefined ? req.body.typeOfInv : existingBill.typeOfInv;
-    
+    let uniqueQuery = {};
     if (
       typeOfInv != "Advance/LC/BG" &&
       typeOfInv != "Direct FI Entry" &&
       typeOfInv != "Proforma Invoice"
     ) {
-      const uniqueQuery = {
-        vendor:
-          updates.vendor !== undefined ? updates.vendor : existingBill.vendor,
-        taxInvNo:
-          req.body.taxInvNo !== undefined
-            ? req.body.taxInvNo
-            : existingBill.taxInvNo,
-        taxInvDate:
-          req.body.taxInvDate !== undefined
-            ? req.body.taxInvDate
-            : existingBill.taxInvDate,
-        region:
-          req.body.region !== undefined ? req.body.region : existingBill.region,
-        _id: { $ne: existingBill._id },
+    // Uniqueness check for vendor, taxInvNo, taxInvDate, region (ignore self)
+    uniqueQuery = {
+      vendor:
+        updates.vendor !== undefined ? updates.vendor : existingBill.vendor,
+      taxInvNo:
+        req.body.taxInvNo !== undefined
+          ? req.body.taxInvNo
+          : existingBill.taxInvNo,
+      region:
+        req.body.region !== undefined ? req.body.region : existingBill.region,
+      _id: { $ne: existingBill._id },
+    };
+  }
+    
+    // For date comparison, use date range to match same day regardless of time
+    const taxInvDate = req.body.taxInvDate !== undefined ? req.body.taxInvDate : existingBill.taxInvDate;
+    if (taxInvDate) {
+      const inputDate = new Date(taxInvDate);
+      const startOfDay = new Date(inputDate.getFullYear(), inputDate.getMonth(), inputDate.getDate(), 0, 0, 0);
+      const endOfDay = new Date(inputDate.getFullYear(), inputDate.getMonth(), inputDate.getDate(), 23, 59, 59, 999);
+      
+      uniqueQuery.taxInvDate = {
+        $gte: startOfDay,
+        $lte: endOfDay
       };
-      const duplicate = await Bill.findOne(uniqueQuery);
-      if (duplicate) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "A bill with the same vendor, taxInvNo, taxInvDate, and region already exists.",
-        });
-      }
+    }
+    
+    const duplicate = await Bill.findOne(uniqueQuery);
+    if (duplicate) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "A bill with the same vendor, taxInvNo, taxInvDate, and region already exists.",
+      });
     }
 
     // Only update the bill if there are changes
@@ -915,6 +936,7 @@ const patchBill = async (req, res) => {
     }
     // Remove the vendor object itself
     delete billObj.vendor;
+
 
     return res.status(200).json({
       success: true,
@@ -1409,6 +1431,9 @@ const notReceivedPimo = async (req, res) => {
       siteStatus: "hold",
       "pimoMumbai.dateGiven": null,
       "pimoMumbai.namePIMO": null || "",
+      "pimoMumbai.dateReceived": null,
+      "pimoMumbai.receivedBy": null || "",
+      "pimoMumbai.markReceived": null || false,
     };
 
     const billFound = await Bill.findById(billId);
@@ -1457,6 +1482,9 @@ const notReceivedAccounts = async (req, res) => {
       currentCount: 3,
       maxCount: 3,
       "accountsDept.dateGiven": null,
+      "accountsDept.dateReceived": null,
+      "accountsDept.receivedBy": null || "",
+      "accountsDept.markReceived": null || false,
     };
 
     const billFound = await Bill.findById(billId);
@@ -1534,6 +1562,105 @@ const accountsPaymentReject = async (req, res) => {
   }
 };
 
+const getFilteredBills = async (req, res) => {
+  const { role } = req.query;
+  try {
+    console.log("Hii");
+    let filter = { region: { $in: req.user.region } };
+
+    switch (role) {
+      case "site_officer":
+        filter = {
+          ...filter,
+          "pimoMumbai.dateReceived": null,
+          siteStatus: "hold"
+        };
+        break;
+      
+      case "site_pimo":
+        filter = {
+          ...filter,
+          $or: [
+            {
+              "pimoMumbai.dateGiven": { $ne: null },
+              "accountsDept.dateReceived": null
+            },
+            {
+              siteStatus: "accept",
+              "accountsDept.dateReceived": null
+            }
+          ]
+        };
+        break;
+
+      case "accounts":
+        filter = {
+          ...filter,
+          "accountsDept.paymentDate": null,
+          "accountsDept.dateGiven": { $ne: null },
+          currentCount: 5
+        };
+        break;
+
+      case "director":
+        filter = {
+          ...filter,
+          siteStatus: { $in: ["accept", "hold"] },
+          "accountsDept.status": "Unpaid"
+        };
+        break;
+
+      case "qs_site":
+        filter = {
+          ...filter,
+          currentCount: 2
+        };
+        break;
+    }
+
+    const bills = await Bill.find(filter)
+      .populate("region")
+      .populate("currency")
+      .populate("natureOfWork")
+      .populate({
+        path: "vendor",
+        populate: [
+          { path: "PANStatus", model: "PanStatusMaster" },
+          { path: "complianceStatus", model: "ComplianceMaster" },
+        ],
+      });
+
+    const mappedBills = bills.map((bill) => {
+      const billObj = bill.toObject();
+      billObj.region = Array.isArray(billObj.region)
+        ? billObj.region.map((r) => r?.name || r)
+        : billObj.region;
+      billObj.currency = billObj.currency?.currency || billObj.currency || null;
+      billObj.natureOfWork =
+        billObj.natureOfWork?.natureOfWork || billObj.natureOfWork || null;
+
+      if (billObj.vendor && typeof billObj.vendor === "object") {
+        billObj.vendorNo = billObj.vendor.vendorNo;
+        billObj.vendorName = billObj.vendor.vendorName;
+        billObj.PAN = billObj.vendor.PAN;
+        billObj.gstNumber = billObj.vendor.GSTNumber;
+
+        billObj.compliance206AB =
+          billObj.vendor.complianceStatus?.compliance206AB ||
+          billObj.vendor.complianceStatus ||
+          null;
+        billObj.panStatus =
+          billObj.vendor.PANStatus?.name || billObj.vendor.PANStatus || null;
+      }
+      delete billObj.vendor;
+      return billObj;
+    });
+    res.status(200).json(mappedBills);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
 export default {
   createBill,
   getBill,
@@ -1558,6 +1685,7 @@ export default {
   notReceivedPimo,
   notReceivedAccounts,
   accountsPaymentReject,
+  getFilteredBills,
 };
 
 // Method to regenerate serial numbers for all bills
@@ -1687,3 +1815,4 @@ export default {
 //     bill,
 //   });
 // };
+

@@ -188,7 +188,7 @@ const billSchema = new mongoose.Schema(
     },
     siteStatus: {
       type: String,
-      enum: ["accept", "reject", "hold"],
+      enum: ["accept", "reject", "hold", "proforma"],
       required: true,
     },
     //2 api req-pimo (date given no date recieved), main pimo(both)
@@ -225,6 +225,7 @@ const billSchema = new mongoose.Schema(
       dateGiven: { type: Date },
       doneBy: { type: String },
       name: { type: String },
+      date: { type: Date },
     },
     approvalDetails: {
       directorApproval: {

@@ -227,7 +227,7 @@ export const changeBatchWorkflowState = async (req, res) => {
               `Forwarding bill ${billId} to MIGO ENtry from Site Officer`
             );
             setObj["migoDetails.dateGiven"] = now;
-            setObj["migoDetails.doneBy"] = toName ? toName : "";
+            // setObj["migoDetails.doneBy"] = toName ? toName : "";
           } else if (toRoleArray.includes("migo_entry_return")) {
             console.log(
               `Forwarding bill ${billId} to MIGO ENtry from Site Officeraa`
@@ -499,6 +499,24 @@ export const changeBatchWorkflowState = async (req, res) => {
                 maxCount: Math.max(billFound.maxCount, 3),
                 "pimoMumbai.dateReturnedFromDirector": now,
                 "approvalDetails.remarksPimoMumbai": remarks,
+              },
+            },
+            {
+              new: true,
+            }
+          );
+        } else if (
+          fromRoleArray.includes("accounts") && 
+          toRoleArray.includes("booking_checking")
+        ) {
+          console.log(` bill ${billId} to Booking & Checking from Accounts`);
+          billWorkflow = await Bill.findByIdAndUpdate(
+            billId,
+            {
+              $set: {
+                currentCount: 5,
+                maxCount: Math.max(billFound.maxCount, 5),
+                "accountsDept.invBookingChecking": now,
               },
             },
             {

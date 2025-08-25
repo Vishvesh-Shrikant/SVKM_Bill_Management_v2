@@ -3,6 +3,7 @@ import Bill from "../models/bill-model.js";
 const roleLevelMap = {
   site_officer: 1,
   site_pimo: 3,
+  director: 4,
   accounts: 5,
 };
 
@@ -18,14 +19,35 @@ export const getBillsAboveLevel = async (req, res) => {
     }
 
     let query;
-    if (role === "accounts") {
-      query = {
-        currentCount: roleLevelMap[role],
-        "accountsDept.paymentDate": { $ne: null },
-      };
-    } else {
-      const level = roleLevelMap[role];
-      query = { currentCount: { $gt: level } };
+    switch (role) {
+      case "site_officer":
+        query = {
+          $or: [
+            { "pimoMumbai.dateReceived": { $ne: null } },
+            {
+              $and: [
+                { siteStatus: { $in: ["proforma", "reject"] } },
+                { "pimoMumbai.dateReceived": { $ne: null } },
+                { "accountsDept.paymentDate": { $ne: null } },
+              ],
+            },
+          ],
+        };
+        break;
+      case "site_pimo":
+        query = { "accountsDept.dateReceived": { $ne: null } };
+        break;
+      case "accounts":
+        query = { "accountsDept.paymentDate": { $ne: null } };
+        break;
+      case "director":
+        query = {
+          $and: [
+            { siteStatus: { $in: ["hold", "accept"] } },
+            { "accountsDept.status": { $eq: "Paid" } },
+          ],
+        }
+        break;
     }
 
     const bills = await Bill.find(query)
